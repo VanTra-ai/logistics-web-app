@@ -15,25 +15,17 @@ import {
   Menu,
   X,
   Users,
+  ScanLine,
+  AlertCircle,
 } from "lucide-react";
 import api from "@/lib/axios";
-
-// Khai báo menu dựa trên các API Backend chúng ta đã xây dựng
-const sidebarLinks = [
-  { name: "Tổng quan", href: "/dashboard", icon: LayoutDashboard },
-  { name: "Quản lý Đơn hàng", href: "/dashboard/orders", icon: Package },
-  { name: "Điều phối Chuyến xe", href: "/dashboard/shipments", icon: Truck },
-  { name: "Hệ thống Bưu cục", href: "/dashboard/hubs", icon: Building2 },
-  { name: "Quản lý Nhân sự", href: "/dashboard/users", icon: Users },
-  { name: "Báo cáo & SLA", href: "/dashboard/statistics", icon: BarChart3 },
-  { name: "Cài đặt", href: "/dashboard/settings", icon: Settings },
-];
 
 interface LoggedInUser {
   id: string;
   email: string;
   full_name: string;
   role: string;
+  hub?: { id: string; name: string } | null;
 }
 
 export default function DashboardLayout({
@@ -46,6 +38,46 @@ export default function DashboardLayout({
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [user, setUser] = useState<LoggedInUser | null>(null);
   const [isAuthorized, setIsAuthorized] = useState(false);
+
+  const getSidebarLinks = () => {
+    if (!user) return [];
+    if (user.role === "HUB_COORDINATOR") {
+      return [
+        {
+          name: "Tổng quan Bưu cục",
+          href: "/dashboard",
+          icon: LayoutDashboard,
+        },
+        { name: "Trạm xử lý đơn", href: "/dashboard/station", icon: ScanLine },
+        {
+          name: "Điều phối Chuyến xe",
+          href: "/dashboard/dispatch",
+          icon: Truck,
+        },
+        {
+          name: "Sự cố & Ngoại lệ",
+          href: "/dashboard/exceptions",
+          icon: AlertCircle,
+        },
+        { name: "Cài đặt", href: "/dashboard/settings", icon: Settings },
+      ];
+    }
+    return [
+      { name: "Tổng quan", href: "/dashboard", icon: LayoutDashboard },
+      { name: "Quản lý Đơn hàng", href: "/dashboard/orders", icon: Package },
+      {
+        name: "Điều phối Chuyến xe",
+        href: "/dashboard/shipments",
+        icon: Truck,
+      },
+      { name: "Hệ thống Bưu cục", href: "/dashboard/hubs", icon: Building2 },
+      { name: "Quản lý Nhân sự", href: "/dashboard/users", icon: Users },
+      { name: "Báo cáo & SLA", href: "/dashboard/statistics", icon: BarChart3 },
+      { name: "Cài đặt", href: "/dashboard/settings", icon: Settings },
+    ];
+  };
+
+  const activeLinks = getSidebarLinks();
 
   useEffect(() => {
     // Kiểm tra tính hợp lệ của token
@@ -147,7 +179,7 @@ export default function DashboardLayout({
         </div>
 
         <nav className="p-4 space-y-1">
-          {sidebarLinks.map((link) => {
+          {activeLinks.map((link) => {
             const Icon = link.icon;
             const isActive = pathname === link.href;
 

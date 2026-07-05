@@ -22,6 +22,7 @@ interface LoggedInUser {
   email: string;
   full_name: string;
   role: string;
+  hub?: { id: string; name: string } | null;
 }
 
 // Cấu trúc dữ liệu API thống kê đơn hàng
@@ -261,6 +262,17 @@ export default function DashboardPage() {
   // LOGIC VẼ BIỂU ĐỒ CỘT (BAR CHART)
   const maxCount = Math.max(...statsData.map((s) => s.count), 1);
   const barChartHeight = 160;
+
+  if (user?.role === "HUB_COORDINATOR") {
+    return (
+      <CoordinatorDashboard
+        user={user}
+        isDemoMode={isDemoMode}
+        onRefresh={() => fetchStatistics(true)}
+        isRefreshing={isRefreshing}
+      />
+    );
+  }
 
   return (
     <div className="space-y-8 animate-fadeIn">
@@ -733,6 +745,295 @@ export default function DashboardPage() {
                 </span>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// COMPONENT DASHBOARD DÀNH RIÊNG CHO NHÂN VIÊN ĐIỀU PHỐI (HUB COORDINATOR)
+interface CoordinatorDashboardProps {
+  user: LoggedInUser | null;
+  isDemoMode: boolean;
+  onRefresh: () => void;
+  isRefreshing: boolean;
+}
+
+function CoordinatorDashboard({
+  user,
+  isDemoMode,
+  onRefresh,
+  isRefreshing,
+}: CoordinatorDashboardProps) {
+  // Trạng thái cục bộ cho bưu cục
+  const hubName = user?.hub?.name || "Bưu cục Cầu Giấy";
+
+  // Dữ liệu giả lập thời gian thực cho bưu cục
+  const localMetrics = {
+    trucksWaiting: 3,
+    sortingPending: 18,
+    slaOverdue: 2,
+    totalAtHub: 45,
+  };
+
+  const outboundShipments = [
+    {
+      id: "ship-101",
+      driver: "Nguyễn Hoàng Nam",
+      phone: "0912345678",
+      vehicle: "29C-888.88",
+      dest: "Bưu cục Hải Phòng",
+      time: "21:30",
+      fill: 85,
+      status: "PENDING",
+    },
+    {
+      id: "ship-102",
+      driver: "Vũ Văn Bách",
+      phone: "0945678901",
+      vehicle: "30E-999.99",
+      dest: "Bưu cục Đà Nẵng",
+      time: "23:00",
+      fill: 40,
+      status: "PENDING",
+    },
+  ];
+
+  const inboundShipments = [
+    {
+      id: "ship-201",
+      driver: "Trần Văn Luận",
+      vehicle: "15C-123.45",
+      origin: "Bưu cục Hải Phòng",
+      eta: "21:15",
+      status: "IN_TRANSIT",
+    },
+    {
+      id: "ship-202",
+      driver: "Lê Minh Tuấn",
+      vehicle: "51D-543.21",
+      origin: "Bưu cục Quận 1",
+      eta: "22:45",
+      status: "IN_TRANSIT",
+    },
+  ];
+
+  return (
+    <div className="space-y-6 animate-fadeIn">
+      {/* Demo Warning */}
+      {isDemoMode && (
+        <div className="p-4 bg-amber-50 border border-amber-200 text-amber-900 rounded-2xl flex items-start gap-3 shadow-sm text-xs">
+          <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+          <div>
+            <span className="font-bold">Đang hiển thị dữ liệu giám sát:</span>{" "}
+            Thống kê hoạt động dựa trên thông số cục bộ của{" "}
+            <span className="font-bold">{hubName}</span>.
+          </div>
+        </div>
+      )}
+
+      {/* Banner chào mừng */}
+      <div className="relative overflow-hidden bg-gradient-to-r from-blue-950 to-slate-900 rounded-2xl p-6 sm:p-8 border border-slate-800 shadow-lg">
+        <div className="absolute top-0 right-0 w-80 h-80 bg-blue-500/10 rounded-full blur-[100px] pointer-events-none" />
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold text-white">
+              Trạm điều phối: {hubName}
+            </h1>
+            <p className="text-slate-400 mt-1.5 text-xs sm:text-sm">
+              Xin chào,{" "}
+              <span className="text-white font-semibold">
+                {user?.full_name}
+              </span>
+              . Bạn đang trực điều hành ca làm việc tại bưu cục.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={onRefresh}
+              disabled={isRefreshing}
+              className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs transition-colors cursor-pointer disabled:opacity-50"
+            >
+              <RefreshCw
+                className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`}
+              />
+              Làm mới
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Grid chỉ số thời gian thực */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Metric 1 */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
+          <div className="p-3 bg-blue-50 text-blue-600 rounded-xl">
+            <Truck className="w-6 h-6" />
+          </div>
+          <div>
+            <span className="text-xs text-slate-500 block font-medium">
+              Xe chờ bốc dỡ
+            </span>
+            <span className="text-xl font-bold text-slate-800">
+              {localMetrics.trucksWaiting} chuyến
+            </span>
+          </div>
+        </div>
+        {/* Metric 2 */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
+          <div className="p-3 bg-amber-50 text-amber-600 rounded-xl">
+            <Package className="w-6 h-6" />
+          </div>
+          <div>
+            <span className="text-xs text-slate-500 block font-medium">
+              Cần phân loại
+            </span>
+            <span className="text-xl font-bold text-slate-800">
+              {localMetrics.sortingPending} đơn
+            </span>
+          </div>
+        </div>
+        {/* Metric 3 */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
+          <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
+            <CheckCircle2 className="w-6 h-6" />
+          </div>
+          <div>
+            <span className="text-xs text-slate-500 block font-medium">
+              Tổng tồn kho bãi
+            </span>
+            <span className="text-xl font-bold text-slate-800">
+              {localMetrics.totalAtHub} kiện
+            </span>
+          </div>
+        </div>
+        {/* Metric 4 */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
+          <div className="p-3 bg-red-50 text-red-600 rounded-xl">
+            <AlertCircle className="w-6 h-6" />
+          </div>
+          <div>
+            <span className="text-xs text-slate-500 block font-medium">
+              Đọng quá hạn SLA
+            </span>
+            <span className="text-xl font-bold text-red-600">
+              {localMetrics.slaOverdue} đơn
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Timeline Xe tải Inbound & Outbound */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Inbound timeline */}
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <h2 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse" />
+              Chuyến xe đang đến bến (Inbound)
+            </h2>
+            <span className="text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-bold">
+              Thời gian thực
+            </span>
+          </div>
+
+          <div className="space-y-3">
+            {inboundShipments.map((ship) => (
+              <div
+                key={ship.id}
+                className="p-3.5 bg-slate-50 hover:bg-slate-100/70 border border-slate-200 rounded-xl transition-all flex items-center justify-between gap-3 text-xs"
+              >
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-800 text-sm">
+                      {ship.vehicle}
+                    </span>
+                    <span className="px-2 py-0.5 bg-blue-100 text-blue-800 font-semibold rounded text-[10px] uppercase">
+                      {ship.status}
+                    </span>
+                  </div>
+                  <div className="text-slate-500 font-medium">
+                    Từ: <span className="text-slate-800 font-bold">{ship.origin}</span>
+                  </div>
+                  <div className="text-[10px] text-slate-400">
+                    Tài xế: {ship.driver}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className="text-slate-400 block font-medium">
+                    Dự kiến cập bến
+                  </span>
+                  <span className="text-sm font-bold text-blue-600 block mt-0.5">
+                    {ship.eta}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Outbound timeline */}
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <h2 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+              Chuyến xe chuẩn bị xuất phát (Outbound)
+            </h2>
+            <span className="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-bold">
+              Đang đóng hàng
+            </span>
+          </div>
+
+          <div className="space-y-3">
+            {outboundShipments.map((ship) => (
+              <div
+                key={ship.id}
+                className="p-3.5 bg-slate-50 hover:bg-slate-100/70 border border-slate-200 rounded-xl transition-all space-y-2 text-xs"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-800 text-sm">
+                      {ship.vehicle}
+                    </span>
+                    <span className="px-2 py-0.5 bg-slate-200 text-slate-700 font-semibold rounded text-[10px] uppercase">
+                      {ship.status}
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-slate-400 font-medium mr-1.5">
+                      Xuất phát:
+                    </span>
+                    <span className="font-bold text-slate-800">{ship.time}</span>
+                  </div>
+                </div>
+                <div className="text-slate-500 font-medium">
+                  Đến: <span className="text-slate-800 font-bold">{ship.dest}</span>
+                </div>
+
+                {/* Tỉ lệ lấp đầy xe */}
+                <div className="space-y-1 pt-1">
+                  <div className="flex justify-between text-[10px] text-slate-400 font-semibold">
+                    <span>Tỉ lệ đóng hàng:</span>
+                    <span
+                      className={
+                        ship.fill >= 80
+                          ? "text-emerald-600 font-bold"
+                          : "text-blue-600 font-bold"
+                      }
+                    >
+                      {ship.fill}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full transition-all duration-500 ${ship.fill >= 80 ? "bg-emerald-500" : "bg-blue-500"}`}
+                      style={{ width: `${ship.fill}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
