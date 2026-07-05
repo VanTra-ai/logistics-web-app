@@ -14,6 +14,7 @@ import {
   Bell,
   Menu,
   X,
+  Users,
 } from "lucide-react";
 import api from "@/lib/axios";
 
@@ -23,6 +24,7 @@ const sidebarLinks = [
   { name: "Quản lý Đơn hàng", href: "/dashboard/orders", icon: Package },
   { name: "Điều phối Chuyến xe", href: "/dashboard/shipments", icon: Truck },
   { name: "Hệ thống Bưu cục", href: "/dashboard/hubs", icon: Building2 },
+  { name: "Quản lý Nhân sự", href: "/dashboard/users", icon: Users },
   { name: "Báo cáo & SLA", href: "/dashboard/statistics", icon: BarChart3 },
   { name: "Cài đặt", href: "/dashboard/settings", icon: Settings },
 ];
@@ -47,24 +49,27 @@ export default function DashboardLayout({
 
   useEffect(() => {
     // Kiểm tra tính hợp lệ của token
-    if (typeof window !== "undefined") {
-      const token = localStorage.getItem("token");
-      const savedUser = localStorage.getItem("user");
+    const timer = setTimeout(() => {
+      if (typeof window !== "undefined") {
+        const token = localStorage.getItem("token");
+        const savedUser = localStorage.getItem("user");
 
-      if (!token) {
-        // Nếu không có token, chuyển hướng về Login
-        router.push("/");
-      } else {
-        setIsAuthorized(true);
-        if (savedUser) {
-          try {
-            setUser(JSON.parse(savedUser));
-          } catch (e) {
-            console.error("Lỗi parse user từ localStorage:", e);
+        if (!token) {
+          // Nếu không có token, chuyển hướng về Login
+          router.push("/");
+        } else {
+          setIsAuthorized(true);
+          if (savedUser) {
+            try {
+              setUser(JSON.parse(savedUser));
+            } catch (e) {
+              console.error("Lỗi parse user từ localStorage:", e);
+            }
           }
         }
       }
-    }
+    }, 0);
+    return () => clearTimeout(timer);
   }, [router]);
 
   const handleLogout = async () => {
@@ -111,7 +116,9 @@ export default function DashboardLayout({
       <div className="min-h-screen bg-[#090D16] flex items-center justify-center">
         <div className="flex flex-col items-center gap-4 text-center">
           <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-slate-400 text-sm font-medium">Đang bảo mật kết nối...</p>
+          <p className="text-slate-400 text-sm font-medium">
+            Đang bảo mật kết nối...
+          </p>
         </div>
       </div>
     );
@@ -232,4 +239,3 @@ export default function DashboardLayout({
     </div>
   );
 }
-

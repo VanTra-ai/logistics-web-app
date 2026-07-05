@@ -1,20 +1,20 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { 
-  Building2, 
-  Search, 
-  Plus, 
-  Edit2, 
-  Trash2, 
-  X, 
-  AlertCircle, 
-  CheckCircle2, 
-  RefreshCw, 
-  MapPin, 
+import {
+  Building2,
+  Search,
+  Plus,
+  Edit2,
+  Trash2,
+  X,
+  AlertCircle,
+  CheckCircle2,
+  RefreshCw,
+  MapPin,
   Calendar,
   ToggleLeft,
-  ToggleRight
+  ToggleRight,
 } from "lucide-react";
 import api from "@/lib/axios";
 import axios from "axios";
@@ -36,7 +36,10 @@ export default function HubsPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Trạng thái thông báo chung
-  const [notification, setNotification] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [notification, setNotification] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
 
   // Trạng thái các Modals
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -44,7 +47,11 @@ export default function HubsPage() {
   const [selectedHub, setSelectedHub] = useState<Hub | null>(null);
 
   // Dữ liệu Form
-  const [formData, setFormData] = useState({ name: "", address: "", is_active: true });
+  const [formData, setFormData] = useState({
+    name: "",
+    address: "",
+    is_active: true,
+  });
   const [isSubmitLoading, setIsSubmitLoading] = useState(false);
   const [formError, setFormError] = useState("");
 
@@ -58,7 +65,7 @@ export default function HubsPage() {
       const response = await api.get("/hubs");
       // Dữ liệu thường có dạng { message: string, data: Hub[] } hoặc trực tiếp mảng Hub[]
       const data = response.data?.data || response.data || [];
-      
+
       if (Array.isArray(data)) {
         setHubs(data);
         setIsDemoMode(false);
@@ -66,14 +73,47 @@ export default function HubsPage() {
         throw new Error("Dữ liệu bưu cục trả về không đúng định dạng");
       }
     } catch (error) {
-      console.warn("Không thể tải danh sách bưu cục từ server. Chuyển sang Demo Mode.", error);
+      console.warn(
+        "Không thể tải danh sách bưu cục từ server. Chuyển sang Demo Mode.",
+        error,
+      );
       // Dữ liệu giả lập (Demo Mode Fallback)
       setHubs([
-        { id: "hub-1", name: "Bưu cục Cầu Giấy", address: "Số 15 Duy Tân, Dịch Vọng Hậu, Cầu Giấy, Hà Nội", is_active: true, created_at: "2026-06-01T08:00:00Z" },
-        { id: "hub-2", name: "Bưu cục Quận 1", address: "218 Nguyễn Thị Minh Khai, Phường 6, Quận 1, TP. HCM", is_active: true, created_at: "2026-06-05T09:30:00Z" },
-        { id: "hub-3", name: "Bưu cục Hải Phòng", address: "102 Lạch Tray, Ngô Quyền, Hải Phòng", is_active: true, created_at: "2026-06-10T10:15:00Z" },
-        { id: "hub-4", name: "Bưu cục Đà Nẵng", address: "48 Chi Lăng, Hải Châu, Đà Nẵng", is_active: true, created_at: "2026-06-12T14:20:00Z" },
-        { id: "hub-5", name: "Bưu cục Thủ Đức", address: "45 Võ Văn Ngân, Linh Chiểu, Thủ Đức, TP. HCM", is_active: false, created_at: "2026-06-15T11:00:00Z" },
+        {
+          id: "hub-1",
+          name: "Bưu cục Cầu Giấy",
+          address: "Số 15 Duy Tân, Dịch Vọng Hậu, Cầu Giấy, Hà Nội",
+          is_active: true,
+          created_at: "2026-06-01T08:00:00Z",
+        },
+        {
+          id: "hub-2",
+          name: "Bưu cục Quận 1",
+          address: "218 Nguyễn Thị Minh Khai, Phường 6, Quận 1, TP. HCM",
+          is_active: true,
+          created_at: "2026-06-05T09:30:00Z",
+        },
+        {
+          id: "hub-3",
+          name: "Bưu cục Hải Phòng",
+          address: "102 Lạch Tray, Ngô Quyền, Hải Phòng",
+          is_active: true,
+          created_at: "2026-06-10T10:15:00Z",
+        },
+        {
+          id: "hub-4",
+          name: "Bưu cục Đà Nẵng",
+          address: "48 Chi Lăng, Hải Châu, Đà Nẵng",
+          is_active: true,
+          created_at: "2026-06-12T14:20:00Z",
+        },
+        {
+          id: "hub-5",
+          name: "Bưu cục Thủ Đức",
+          address: "45 Võ Văn Ngân, Linh Chiểu, Thủ Đức, TP. HCM",
+          is_active: false,
+          created_at: "2026-06-15T11:00:00Z",
+        },
       ]);
       setIsDemoMode(true);
     } finally {
@@ -83,7 +123,10 @@ export default function HubsPage() {
   };
 
   useEffect(() => {
-    fetchHubs();
+    const timer = setTimeout(() => {
+      fetchHubs();
+    }, 0);
+    return () => clearTimeout(timer);
   }, []);
 
   // Xử lý ẩn thông báo sau 5 giây
@@ -95,9 +138,10 @@ export default function HubsPage() {
   }, [notification]);
 
   // Tìm kiếm & Lọc bưu cục theo tên hoặc địa chỉ
-  const filteredHubs = hubs.filter(hub => 
-    hub.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    hub.address.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredHubs = hubs.filter(
+    (hub) =>
+      hub.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      hub.address.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
   // Mở Modal Thêm mới
@@ -110,7 +154,11 @@ export default function HubsPage() {
   // Mở Modal Chỉnh sửa
   const openEditModal = (hub: Hub) => {
     setSelectedHub(hub);
-    setFormData({ name: hub.name, address: hub.address, is_active: hub.is_active });
+    setFormData({
+      name: hub.name,
+      address: hub.address,
+      is_active: hub.is_active,
+    });
     setFormError("");
     setIsEditModalOpen(true);
   };
@@ -133,11 +181,14 @@ export default function HubsPage() {
         name: formData.name,
         address: formData.address,
         is_active: true,
-        created_at: new Date().toISOString()
+        created_at: new Date().toISOString(),
       };
       setHubs([newHub, ...hubs]);
       setIsAddModalOpen(false);
-      setNotification({ type: "success", message: "Đã thêm bưu cục mới thành công (Demo Mode)!" });
+      setNotification({
+        type: "success",
+        message: "Đã thêm bưu cục mới thành công (Demo Mode)!",
+      });
       setIsSubmitLoading(false);
       return;
     }
@@ -145,14 +196,17 @@ export default function HubsPage() {
     try {
       const response = await api.post("/hubs", {
         name: formData.name,
-        address: formData.address
+        address: formData.address,
       });
-      
+
       const createdHub = response.data?.data || response.data;
       if (createdHub) {
         setHubs([createdHub, ...hubs]);
         setIsAddModalOpen(false);
-        setNotification({ type: "success", message: "Tạo bưu cục mới thành công!" });
+        setNotification({
+          type: "success",
+          message: "Tạo bưu cục mới thành công!",
+        });
       }
     } catch (error) {
       if (axios.isAxiosError(error)) {
@@ -179,14 +233,23 @@ export default function HubsPage() {
 
     if (isDemoMode) {
       // Giả lập cập nhật trên Client
-      setHubs(hubs.map(h => h.id === selectedHub.id ? { 
-        ...h, 
-        name: formData.name, 
-        address: formData.address, 
-        is_active: formData.is_active 
-      } : h));
+      setHubs(
+        hubs.map((h) =>
+          h.id === selectedHub.id
+            ? {
+                ...h,
+                name: formData.name,
+                address: formData.address,
+                is_active: formData.is_active,
+              }
+            : h,
+        ),
+      );
       setIsEditModalOpen(false);
-      setNotification({ type: "success", message: "Cập nhật bưu cục thành công (Demo Mode)!" });
+      setNotification({
+        type: "success",
+        message: "Cập nhật bưu cục thành công (Demo Mode)!",
+      });
       setIsSubmitLoading(false);
       return;
     }
@@ -195,14 +258,17 @@ export default function HubsPage() {
       const response = await api.patch(`/hubs/${selectedHub.id}`, {
         name: formData.name,
         address: formData.address,
-        is_active: formData.is_active
+        is_active: formData.is_active,
       });
 
       const updatedHub = response.data?.data || response.data;
       if (updatedHub) {
-        setHubs(hubs.map(h => h.id === selectedHub.id ? updatedHub : h));
+        setHubs(hubs.map((h) => (h.id === selectedHub.id ? updatedHub : h)));
         setIsEditModalOpen(false);
-        setNotification({ type: "success", message: "Cập nhật bưu cục thành công!" });
+        setNotification({
+          type: "success",
+          message: "Cập nhật bưu cục thành công!",
+        });
       }
     } catch (error) {
       if (axios.isAxiosError(error)) {
@@ -217,20 +283,27 @@ export default function HubsPage() {
 
   // Vô hiệu hóa/Đóng cửa bưu cục (DELETE /hubs/:id)
   const handleDeleteHub = async (hub: Hub) => {
-    const confirmDelete = window.confirm(`Bạn có chắc chắn muốn đóng cửa bưu cục "${hub.name}" không? Hàng tồn kho của bưu cục phải bằng 0 mới thực hiện được.`);
+    const confirmDelete = window.confirm(
+      `Bạn có chắc chắn muốn đóng cửa bưu cục "${hub.name}" không? Hàng tồn kho của bưu cục phải bằng 0 mới thực hiện được.`,
+    );
     if (!confirmDelete) return;
 
     if (isDemoMode) {
       // Giả lập kiểm tra nghiệp vụ trên Client:
       // Bưu cục Cầu Giấy (hub-1) hoặc Quận 1 (hub-2) được giả lập là có đơn hàng tồn kho
       if (hub.id === "hub-1" || hub.id === "hub-2") {
-        setNotification({ 
-          type: "error", 
-          message: `Không thể đóng cửa! Bưu cục ${hub.name} này vẫn còn đơn hàng đang tồn kho (Demo Check).` 
+        setNotification({
+          type: "error",
+          message: `Không thể đóng cửa! Bưu cục ${hub.name} này vẫn còn đơn hàng đang tồn kho (Demo Check).`,
         });
       } else {
-        setHubs(hubs.map(h => h.id === hub.id ? { ...h, is_active: false } : h));
-        setNotification({ type: "success", message: `Đã đóng cửa bưu cục ${hub.name} an toàn (Demo Mode)!` });
+        setHubs(
+          hubs.map((h) => (h.id === hub.id ? { ...h, is_active: false } : h)),
+        );
+        setNotification({
+          type: "success",
+          message: `Đã đóng cửa bưu cục ${hub.name} an toàn (Demo Mode)!`,
+        });
       }
       return;
     }
@@ -238,22 +311,34 @@ export default function HubsPage() {
     try {
       const response = await api.delete(`/hubs/${hub.id}`);
       const updatedHub = response.data?.data || response.data;
-      
+
       // Xóa thành công hoặc vô hiệu hóa thành công
       if (updatedHub) {
-        setHubs(hubs.map(h => h.id === hub.id ? { ...h, is_active: false } : h));
+        setHubs(
+          hubs.map((h) => (h.id === hub.id ? { ...h, is_active: false } : h)),
+        );
       } else {
-        setHubs(hubs.map(h => h.id === hub.id ? { ...h, is_active: false } : h));
+        setHubs(
+          hubs.map((h) => (h.id === hub.id ? { ...h, is_active: false } : h)),
+        );
       }
-      setNotification({ type: "success", message: `Đã đóng cửa bưu cục "${hub.name}" an toàn!` });
+      setNotification({
+        type: "success",
+        message: `Đã đóng cửa bưu cục "${hub.name}" an toàn!`,
+      });
     } catch (error) {
       if (axios.isAxiosError(error)) {
-        setNotification({ 
-          type: "error", 
-          message: error.response?.data?.message || `Không thể đóng cửa bưu cục ${hub.name}!` 
+        setNotification({
+          type: "error",
+          message:
+            error.response?.data?.message ||
+            `Không thể đóng cửa bưu cục ${hub.name}!`,
         });
       } else {
-        setNotification({ type: "error", message: "Lỗi kết nối mạng, không thể xóa bưu cục." });
+        setNotification({
+          type: "error",
+          message: "Lỗi kết nối mạng, không thể xóa bưu cục.",
+        });
       }
     }
   };
@@ -262,7 +347,7 @@ export default function HubsPage() {
     try {
       const d = new Date(dateStr);
       return `${d.getDate().toString().padStart(2, "0")}/${(d.getMonth() + 1).toString().padStart(2, "0")}/${d.getFullYear()}`;
-    } catch (e) {
+    } catch {
       return dateStr;
     }
   };
@@ -274,24 +359,37 @@ export default function HubsPage() {
         <div className="p-4 bg-amber-50 border border-amber-200 text-amber-900 rounded-2xl flex items-start gap-3 shadow-sm">
           <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
           <div className="text-xs">
-            <span className="font-bold">Đang chạy ở chế độ giả lập (Demo Mode):</span> Hệ thống web app không kết nối được tới API Backend (`http://localhost:3333/hubs`). Các hành động Thêm/Sửa/Đóng cửa bưu cục sẽ chỉ mô phỏng trên Client.
+            <span className="font-bold">
+              Đang chạy ở chế độ giả lập (Demo Mode):
+            </span>{" "}
+            Hệ thống web app không kết nối được tới API Backend
+            (`http://localhost:3333/hubs`). Các hành động Thêm/Sửa/Đóng cửa bưu
+            cục sẽ chỉ mô phỏng trên Client.
           </div>
         </div>
       )}
 
       {/* Floating Notifications toast */}
       {notification && (
-        <div className={`fixed bottom-5 right-5 z-50 p-4 rounded-xl shadow-xl flex items-center gap-3 max-w-sm border transition-all duration-300 transform translate-y-0 ${
-          notification.type === "success" 
-            ? "bg-emerald-50 text-emerald-950 border-emerald-200" 
-            : "bg-red-50 text-red-950 border-red-200"
-        }`}>
-          {notification.type === "success" 
-            ? <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-            : <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
-          }
-          <p className="text-xs font-semibold leading-normal">{notification.message}</p>
-          <button onClick={() => setNotification(null)} className="text-slate-400 hover:text-slate-600 ml-auto cursor-pointer">
+        <div
+          className={`fixed bottom-5 right-5 z-50 p-4 rounded-xl shadow-xl flex items-center gap-3 max-w-sm border transition-all duration-300 transform translate-y-0 ${
+            notification.type === "success"
+              ? "bg-emerald-50 text-emerald-950 border-emerald-200"
+              : "bg-red-50 text-red-950 border-red-200"
+          }`}
+        >
+          {notification.type === "success" ? (
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+          ) : (
+            <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
+          )}
+          <p className="text-xs font-semibold leading-normal">
+            {notification.message}
+          </p>
+          <button
+            onClick={() => setNotification(null)}
+            className="text-slate-400 hover:text-slate-600 ml-auto cursor-pointer"
+          >
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -304,20 +402,27 @@ export default function HubsPage() {
             <Building2 className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-slate-800">Quản lý bưu cục (Hubs)</h1>
-            <p className="text-xs text-slate-500 mt-1">Quản lý và điều phối các kho hàng bưu cục trong mạng lưới logistics</p>
+            <h1 className="text-xl font-bold text-slate-800">
+              Quản lý bưu cục (Hubs)
+            </h1>
+            <p className="text-xs text-slate-500 mt-1">
+              Quản lý và điều phối các kho hàng bưu cục trong mạng lưới
+              logistics
+            </p>
           </div>
         </div>
         <div className="flex gap-2">
-          <button 
+          <button
             onClick={() => fetchHubs(true)}
             disabled={isRefreshing}
             className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl border border-slate-250 transition-colors cursor-pointer disabled:opacity-50"
             title="Làm mới danh sách"
           >
-            <RefreshCw className={`w-5 h-5 ${isRefreshing ? "animate-spin" : ""}`} />
+            <RefreshCw
+              className={`w-5 h-5 ${isRefreshing ? "animate-spin" : ""}`}
+            />
           </button>
-          <button 
+          <button
             onClick={openAddModal}
             className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm rounded-xl transition-all shadow-md shadow-blue-900/10 active:scale-[0.98] cursor-pointer"
           >
@@ -347,11 +452,15 @@ export default function HubsPage() {
         <div className="flex gap-4 text-xs font-semibold">
           <div className="bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm flex items-center gap-2">
             <span className="text-slate-500">Tổng số:</span>
-            <span className="text-slate-800 font-bold text-sm">{hubs.length}</span>
+            <span className="text-slate-800 font-bold text-sm">
+              {hubs.length}
+            </span>
           </div>
           <div className="bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm flex items-center gap-2">
             <span className="text-slate-500">Hoạt động:</span>
-            <span className="text-emerald-600 font-bold text-sm">{hubs.filter(h => h.is_active).length}</span>
+            <span className="text-emerald-600 font-bold text-sm">
+              {hubs.filter((h) => h.is_active).length}
+            </span>
           </div>
         </div>
       </div>
@@ -361,15 +470,22 @@ export default function HubsPage() {
         {isLoading ? (
           <div className="p-12 text-center flex flex-col items-center justify-center gap-3">
             <div className="w-8 h-8 border-3 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-            <p className="text-slate-500 text-sm font-medium">Đang tải dữ liệu bưu cục...</p>
+            <p className="text-slate-500 text-sm font-medium">
+              Đang tải dữ liệu bưu cục...
+            </p>
           </div>
         ) : filteredHubs.length === 0 ? (
           <div className="p-16 text-center">
             <div className="mx-auto w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mb-3 text-slate-400">
               <Building2 className="w-6 h-6" />
             </div>
-            <h3 className="text-sm font-bold text-slate-800">Không tìm thấy bưu cục nào</h3>
-            <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">Vui lòng kiểm tra lại từ khóa tìm kiếm hoặc thử thêm bưu cục mới vào hệ thống.</p>
+            <h3 className="text-sm font-bold text-slate-800">
+              Không tìm thấy bưu cục nào
+            </h3>
+            <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+              Vui lòng kiểm tra lại từ khóa tìm kiếm hoặc thử thêm bưu cục mới
+              vào hệ thống.
+            </p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -385,25 +501,35 @@ export default function HubsPage() {
               </thead>
               <tbody className="divide-y divide-slate-150 text-sm">
                 {filteredHubs.map((hub) => (
-                  <tr key={hub.id} className="hover:bg-slate-50/30 transition-colors">
+                  <tr
+                    key={hub.id}
+                    className="hover:bg-slate-50/30 transition-colors"
+                  >
                     <td className="px-6 py-4 font-semibold text-slate-900">
                       <div className="flex items-center gap-2.5">
-                        <div className={`w-2.5 h-2.5 rounded-full ${hub.is_active ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+                        <div
+                          className={`w-2.5 h-2.5 rounded-full ${hub.is_active ? "bg-emerald-500" : "bg-slate-400"}`}
+                        />
                         {hub.name}
                       </div>
                     </td>
                     <td className="px-6 py-4 text-slate-600 max-w-xs md:max-w-sm lg:max-w-md truncate">
-                      <div className="flex items-center gap-1.5" title={hub.address}>
+                      <div
+                        className="flex items-center gap-1.5"
+                        title={hub.address}
+                      >
                         <MapPin className="w-4 h-4 text-slate-400 shrink-0" />
                         <span className="truncate">{hub.address}</span>
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
-                        hub.is_active 
-                          ? "bg-emerald-50 text-emerald-700 border border-emerald-250" 
-                          : "bg-slate-100 text-slate-600 border border-slate-200"
-                      }`}>
+                      <span
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
+                          hub.is_active
+                            ? "bg-emerald-50 text-emerald-700 border border-emerald-250"
+                            : "bg-slate-100 text-slate-600 border border-slate-200"
+                        }`}
+                      >
                         {hub.is_active ? "Hoạt động" : "Đã đóng cửa"}
                       </span>
                     </td>
@@ -414,7 +540,7 @@ export default function HubsPage() {
                       </div>
                     </td>
                     <td className="px-6 py-4 text-right space-x-1">
-                      <button 
+                      <button
                         onClick={() => openEditModal(hub)}
                         className="p-1.5 hover:bg-slate-100 text-slate-600 hover:text-blue-600 rounded-lg transition-colors cursor-pointer"
                         title="Chỉnh sửa thông tin"
@@ -422,7 +548,7 @@ export default function HubsPage() {
                         <Edit2 className="w-4 h-4" />
                       </button>
                       {hub.is_active && (
-                        <button 
+                        <button
                           onClick={() => handleDeleteHub(hub)}
                           className="p-1.5 hover:bg-red-50 text-slate-600 hover:text-red-600 rounded-lg transition-colors cursor-pointer"
                           title="Đóng cửa bưu cục"
@@ -444,12 +570,17 @@ export default function HubsPage() {
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn">
           <div className="bg-white rounded-2xl w-full max-w-md border border-slate-200 shadow-2xl relative overflow-hidden">
             <div className="p-6 border-b border-slate-150 flex justify-between items-center bg-slate-50/50">
-              <h2 className="text-lg font-bold text-slate-800">Thêm bưu cục mới</h2>
-              <button onClick={() => setIsAddModalOpen(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+              <h2 className="text-lg font-bold text-slate-800">
+                Thêm bưu cục mới
+              </h2>
+              <button
+                onClick={() => setIsAddModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
-            
+
             <form onSubmit={handleCreateHub} className="p-6 space-y-4">
               {formError && (
                 <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl flex items-start gap-2.5">
@@ -459,26 +590,34 @@ export default function HubsPage() {
               )}
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Tên bưu cục</label>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                  Tên bưu cục
+                </label>
                 <input
                   type="text"
                   required
                   className="block w-full px-3.5 py-2.5 bg-slate-50 border border-slate-250 text-slate-800 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm placeholder:text-slate-400"
                   placeholder="Ví dụ: Bưu cục Cầu Giấy"
                   value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, name: e.target.value })
+                  }
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Địa chỉ chi tiết</label>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                  Địa chỉ chi tiết
+                </label>
                 <textarea
                   required
                   rows={3}
                   className="block w-full px-3.5 py-2.5 bg-slate-50 border border-slate-250 text-slate-800 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm placeholder:text-slate-400 resize-none"
                   placeholder="Ví dụ: Số 15 Duy Tân, Dịch Vọng Hậu, Cầu Giấy, Hà Nội"
                   value={formData.address}
-                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, address: e.target.value })
+                  }
                 />
               </div>
 
@@ -508,12 +647,17 @@ export default function HubsPage() {
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn">
           <div className="bg-white rounded-2xl w-full max-w-md border border-slate-200 shadow-2xl relative overflow-hidden">
             <div className="p-6 border-b border-slate-150 flex justify-between items-center bg-slate-50/50">
-              <h2 className="text-lg font-bold text-slate-800">Chỉnh sửa bưu cục</h2>
-              <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+              <h2 className="text-lg font-bold text-slate-800">
+                Chỉnh sửa bưu cục
+              </h2>
+              <button
+                onClick={() => setIsEditModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
-            
+
             <form onSubmit={handleUpdateHub} className="p-6 space-y-4">
               {formError && (
                 <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl flex items-start gap-2.5">
@@ -523,36 +667,50 @@ export default function HubsPage() {
               )}
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Tên bưu cục</label>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                  Tên bưu cục
+                </label>
                 <input
                   type="text"
                   required
                   className="block w-full px-3.5 py-2.5 bg-slate-50 border border-slate-250 text-slate-800 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm"
                   value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, name: e.target.value })
+                  }
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Địa chỉ chi tiết</label>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                  Địa chỉ chi tiết
+                </label>
                 <textarea
                   required
                   rows={3}
                   className="block w-full px-3.5 py-2.5 bg-slate-50 border border-slate-250 text-slate-800 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm resize-none"
                   value={formData.address}
-                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, address: e.target.value })
+                  }
                 />
               </div>
 
               {/* Toggle Trạng thái hoạt động */}
               <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-xl">
                 <div>
-                  <span className="block text-sm font-semibold text-slate-800">Trạng thái hoạt động</span>
-                  <span className="block text-[11px] text-slate-500">Mở/Đóng để bật/tắt hoạt động giao nhận đơn</span>
+                  <span className="block text-sm font-semibold text-slate-800">
+                    Trạng thái hoạt động
+                  </span>
+                  <span className="block text-[11px] text-slate-500">
+                    Mở/Đóng để bật/tắt hoạt động giao nhận đơn
+                  </span>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setFormData({ ...formData, is_active: !formData.is_active })}
+                  onClick={() =>
+                    setFormData({ ...formData, is_active: !formData.is_active })
+                  }
                   className="text-blue-600 hover:text-blue-700 cursor-pointer"
                 >
                   {formData.is_active ? (

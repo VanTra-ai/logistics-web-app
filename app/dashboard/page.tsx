@@ -2,20 +2,17 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { 
-  Package, 
-  Truck, 
-  Building2, 
-  BarChart3, 
-  TrendingUp, 
-  Plus, 
-  ArrowUpRight, 
-  Clock, 
-  CheckCircle2, 
+import {
+  Package,
+  Truck,
+  TrendingUp,
+  ArrowUpRight,
+  Clock,
+  CheckCircle2,
   AlertTriangle,
   LogOut,
   RefreshCw,
-  AlertCircle
+  AlertCircle,
 } from "lucide-react";
 import api from "@/lib/axios";
 
@@ -34,17 +31,52 @@ interface OrderStatItem {
 }
 
 const mockRecentOrders = [
-  { id: "ORD-9481", customer: "Nguyễn Văn A", destination: "Bưu cục Cầu Giấy", weight: "4.5 kg", status: "PENDING", time: "10 phút trước" },
-  { id: "ORD-9482", customer: "Trần Thị B", destination: "Bưu cục Quận 1", weight: "12.0 kg", status: "PICKED_UP", time: "25 phút trước" },
-  { id: "ORD-9483", customer: "Lê Hoàng C", destination: "Bưu cục Hải Phòng", weight: "1.2 kg", status: "PENDING", time: "1 giờ trước" },
-  { id: "ORD-9484", customer: "Phạm Minh D", destination: "Bưu cục Đà Nẵng", weight: "25.8 kg", status: "IN_TRANSIT", time: "2 giờ trước" },
-  { id: "ORD-9485", customer: "Đỗ Thanh E", destination: "Bưu cục Thủ Đức", weight: "8.1 kg", status: "DELIVERED", time: "3 giờ trước" },
+  {
+    id: "ORD-9481",
+    customer: "Nguyễn Văn A",
+    destination: "Bưu cục Cầu Giấy",
+    weight: "4.5 kg",
+    status: "PENDING",
+    time: "10 phút trước",
+  },
+  {
+    id: "ORD-9482",
+    customer: "Trần Thị B",
+    destination: "Bưu cục Quận 1",
+    weight: "12.0 kg",
+    status: "PICKED_UP",
+    time: "25 phút trước",
+  },
+  {
+    id: "ORD-9483",
+    customer: "Lê Hoàng C",
+    destination: "Bưu cục Hải Phòng",
+    weight: "1.2 kg",
+    status: "PENDING",
+    time: "1 giờ trước",
+  },
+  {
+    id: "ORD-9484",
+    customer: "Phạm Minh D",
+    destination: "Bưu cục Đà Nẵng",
+    weight: "25.8 kg",
+    status: "IN_TRANSIT",
+    time: "2 giờ trước",
+  },
+  {
+    id: "ORD-9485",
+    customer: "Đỗ Thanh E",
+    destination: "Bưu cục Thủ Đức",
+    weight: "8.1 kg",
+    status: "DELIVERED",
+    time: "3 giờ trước",
+  },
 ];
 
 export default function DashboardPage() {
   const router = useRouter();
   const [user, setUser] = useState<LoggedInUser | null>(null);
-  
+
   // Các trạng thái dữ liệu thống kê
   const [statsData, setStatsData] = useState<OrderStatItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -53,16 +85,19 @@ export default function DashboardPage() {
 
   // Load thông tin người dùng từ localStorage
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const savedUser = localStorage.getItem("user");
-      if (savedUser) {
-        try {
-          setUser(JSON.parse(savedUser));
-        } catch (e) {
-          console.error("Lỗi parse thông tin user từ localStorage:", e);
+    const timer = setTimeout(() => {
+      if (typeof window !== "undefined") {
+        const savedUser = localStorage.getItem("user");
+        if (savedUser) {
+          try {
+            setUser(JSON.parse(savedUser));
+          } catch (e) {
+            console.error("Lỗi parse thông tin user từ localStorage:", e);
+          }
         }
       }
-    }
+    }, 0);
+    return () => clearTimeout(timer);
   }, []);
 
   // Fetch dữ liệu thống kê từ API
@@ -74,7 +109,7 @@ export default function DashboardPage() {
       const response = await api.get("/orders/statistics");
       // Dữ liệu API trả về có dạng: { message: string, data: OrderStatItem[] } hoặc trực tiếp mảng
       const data = response.data?.data || response.data || [];
-      
+
       if (Array.isArray(data) && data.length > 0) {
         setStatsData(data);
         setIsDemoMode(false);
@@ -82,13 +117,16 @@ export default function DashboardPage() {
         throw new Error("Dữ liệu thống kê không hợp lệ");
       }
     } catch (error) {
-      console.warn("Không kết nối được API /orders/statistics. Sử dụng dữ liệu giả lập.", error);
+      console.warn(
+        "Không kết nối được API /orders/statistics. Sử dụng dữ liệu giả lập.",
+        error,
+      );
       // Fallback sang dữ liệu giả lập (Demo Mode)
       setStatsData([
         { status: "PENDING", count: 320 },
         { status: "DELIVERING", count: 450 },
         { status: "FINISHED", count: 420 },
-        { status: "CANCELLED", count: 58 }
+        { status: "CANCELLED", count: 58 },
       ]);
       setIsDemoMode(true);
     } finally {
@@ -98,7 +136,10 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
-    fetchStatistics();
+    const timer = setTimeout(() => {
+      fetchStatistics();
+    }, 0);
+    return () => clearTimeout(timer);
   }, []);
 
   // Thực hiện Đăng xuất gọi API POST /auth/logout
@@ -131,7 +172,7 @@ export default function DashboardPage() {
 
   // Tính toán các dữ liệu tổng hợp
   const getStatusCount = (status: string) => {
-    const item = statsData.find(s => s.status === status);
+    const item = statsData.find((s) => s.status === status);
     return item ? item.count : 0;
   };
 
@@ -139,37 +180,51 @@ export default function DashboardPage() {
   const finishedCount = getStatusCount("FINISHED");
   const deliveringCount = getStatusCount("DELIVERING");
   const pendingCount = getStatusCount("PENDING");
-  const cancelledCount = getStatusCount("CANCELLED");
 
   // Quy đổi tên trạng thái sang Tiếng Việt
   const translateStatus = (status: string) => {
     switch (status) {
-      case "PENDING": return "Chờ xử lý";
-      case "DELIVERING": return "Đang giao";
-      case "FINISHED": return "Hoàn thành";
-      case "CANCELLED": return "Đã hủy";
-      default: return status;
+      case "PENDING":
+        return "Chờ xử lý";
+      case "DELIVERING":
+        return "Đang giao";
+      case "FINISHED":
+        return "Hoàn thành";
+      case "CANCELLED":
+        return "Đã hủy";
+      default:
+        return status;
     }
   };
 
   // Màu sắc tương ứng cho các trạng thái
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "PENDING": return "#F59E0B"; // Amber
-      case "DELIVERING": return "#3B82F6"; // Blue
-      case "FINISHED": return "#10B981"; // Emerald
-      case "CANCELLED": return "#EF4444"; // Red
-      default: return "#64748B"; // Slate
+      case "PENDING":
+        return "#F59E0B"; // Amber
+      case "DELIVERING":
+        return "#3B82F6"; // Blue
+      case "FINISHED":
+        return "#10B981"; // Emerald
+      case "CANCELLED":
+        return "#EF4444"; // Red
+      default:
+        return "#64748B"; // Slate
     }
   };
 
   const getStatusBgColor = (status: string) => {
     switch (status) {
-      case "PENDING": return "bg-amber-500";
-      case "DELIVERING": return "bg-blue-500";
-      case "FINISHED": return "bg-emerald-500";
-      case "CANCELLED": return "bg-red-500";
-      default: return "bg-slate-500";
+      case "PENDING":
+        return "bg-amber-500";
+      case "DELIVERING":
+        return "bg-blue-500";
+      case "FINISHED":
+        return "bg-emerald-500";
+      case "CANCELLED":
+        return "bg-red-500";
+      default:
+        return "bg-slate-500";
     }
   };
 
@@ -177,16 +232,20 @@ export default function DashboardPage() {
   // Đường tròn bán kính r=50 -> Chu vi = 2 * pi * r = 314.16
   const donutRadius = 50;
   const donutCircumference = 2 * Math.PI * donutRadius; // 314.159
-  let accumulatedPercentage = 0;
-
-  const donutSlices = statsData.map((item) => {
+  const donutSlices = statsData.map((item, index) => {
     const count = item.count;
     const percentage = totalOrders > 0 ? count / totalOrders : 0;
     const strokeLength = percentage * donutCircumference;
     const strokeGap = donutCircumference - strokeLength;
-    const strokeOffset = accumulatedPercentage * donutCircumference;
-    
-    accumulatedPercentage += percentage;
+
+    const accumulatedPercentageBefore = statsData
+      .slice(0, index)
+      .reduce(
+        (sum, curr) => sum + (totalOrders > 0 ? curr.count / totalOrders : 0),
+        0,
+      );
+
+    const strokeOffset = accumulatedPercentageBefore * donutCircumference;
 
     return {
       status: item.status,
@@ -195,12 +254,12 @@ export default function DashboardPage() {
       strokeLength,
       strokeGap,
       strokeOffset: -strokeOffset,
-      color: getStatusColor(item.status)
+      color: getStatusColor(item.status),
     };
   });
 
   // LOGIC VẼ BIỂU ĐỒ CỘT (BAR CHART)
-  const maxCount = Math.max(...statsData.map(s => s.count), 1);
+  const maxCount = Math.max(...statsData.map((s) => s.count), 1);
   const barChartHeight = 160;
 
   return (
@@ -210,7 +269,12 @@ export default function DashboardPage() {
         <div className="p-4 bg-amber-50 border border-amber-200 text-amber-900 rounded-2xl flex items-start gap-3 shadow-sm">
           <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
           <div className="text-xs">
-            <span className="font-bold">Đang chạy ở chế độ giả lập (Demo Mode):</span> Không kết nối được tới API thống kê đơn hàng của Backend (`http://localhost:3333/orders/statistics`). Dưới đây là thông số giả lập để hỗ trợ xem trước UI.
+            <span className="font-bold">
+              Đang chạy ở chế độ giả lập (Demo Mode):
+            </span>{" "}
+            Không kết nối được tới API thống kê đơn hàng của Backend
+            (`http://localhost:3333/orders/statistics`). Dưới đây là thông số
+            giả lập để hỗ trợ xem trước UI.
           </div>
         </div>
       )}
@@ -227,20 +291,26 @@ export default function DashboardPage() {
               Chào mừng trở lại, {user?.full_name || "Thành viên"}!
             </h1>
             <p className="text-slate-400 mt-2 text-sm sm:text-base max-w-xl">
-              Hệ thống vận hành WMS Pro đang hoạt động ổn định. Bạn đăng nhập với vai trò{" "}
-              <span className="text-blue-400 font-semibold">{getRoleLabel(user?.role || "")}</span>.
+              Hệ thống vận hành WMS Pro đang hoạt động ổn định. Bạn đăng nhập
+              với vai trò{" "}
+              <span className="text-blue-400 font-semibold">
+                {getRoleLabel(user?.role || "")}
+              </span>
+              .
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
-            <button 
+            <button
               onClick={() => fetchStatistics(true)}
               disabled={isRefreshing}
               className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-slate-600 font-medium text-sm rounded-xl transition-all active:scale-[0.98] cursor-pointer disabled:opacity-55"
             >
-              <RefreshCw className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`} />
+              <RefreshCw
+                className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`}
+              />
               Làm mới số liệu
             </button>
-            <button 
+            <button
               onClick={handleLogout}
               className="flex items-center gap-2 px-4 py-2.5 bg-red-650 hover:bg-red-700 text-white font-medium text-sm rounded-xl transition-all shadow-md shadow-red-950/20 active:scale-[0.98] cursor-pointer"
             >
@@ -255,7 +325,9 @@ export default function DashboardPage() {
       {isLoading ? (
         <div className="min-h-[300px] flex flex-col justify-center items-center gap-4 bg-white rounded-2xl border border-slate-200 p-12">
           <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-slate-500 text-sm font-medium">Đang đồng bộ số liệu đơn hàng động...</p>
+          <p className="text-slate-500 text-sm font-medium">
+            Đang đồng bộ số liệu đơn hàng động...
+          </p>
         </div>
       ) : (
         <>
@@ -273,8 +345,12 @@ export default function DashboardPage() {
                 </span>
               </div>
               <div className="mt-4">
-                <h3 className="text-2xl font-bold text-slate-800 tracking-tight">{totalOrders}</h3>
-                <p className="text-slate-500 text-sm font-medium mt-1">Tổng đơn liên kết</p>
+                <h3 className="text-2xl font-bold text-slate-800 tracking-tight">
+                  {totalOrders}
+                </h3>
+                <p className="text-slate-500 text-sm font-medium mt-1">
+                  Tổng đơn liên kết
+                </p>
               </div>
             </div>
 
@@ -289,8 +365,12 @@ export default function DashboardPage() {
                 </span>
               </div>
               <div className="mt-4">
-                <h3 className="text-2xl font-bold text-slate-800 tracking-tight">{deliveringCount}</h3>
-                <p className="text-slate-500 text-sm font-medium mt-1">Đơn đang giao (Delivering)</p>
+                <h3 className="text-2xl font-bold text-slate-800 tracking-tight">
+                  {deliveringCount}
+                </h3>
+                <p className="text-slate-500 text-sm font-medium mt-1">
+                  Đơn đang giao (Delivering)
+                </p>
               </div>
             </div>
 
@@ -305,8 +385,12 @@ export default function DashboardPage() {
                 </span>
               </div>
               <div className="mt-4">
-                <h3 className="text-2xl font-bold text-slate-800 tracking-tight">{finishedCount}</h3>
-                <p className="text-slate-500 text-sm font-medium mt-1">Đơn thành công (Finished)</p>
+                <h3 className="text-2xl font-bold text-slate-800 tracking-tight">
+                  {finishedCount}
+                </h3>
+                <p className="text-slate-500 text-sm font-medium mt-1">
+                  Đơn thành công (Finished)
+                </p>
               </div>
             </div>
 
@@ -321,8 +405,12 @@ export default function DashboardPage() {
                 </span>
               </div>
               <div className="mt-4">
-                <h3 className="text-2xl font-bold text-slate-800 tracking-tight">{pendingCount}</h3>
-                <p className="text-slate-500 text-sm font-medium mt-1">Đơn chờ đi lấy (Pending)</p>
+                <h3 className="text-2xl font-bold text-slate-800 tracking-tight">
+                  {pendingCount}
+                </h3>
+                <p className="text-slate-500 text-sm font-medium mt-1">
+                  Đơn chờ đi lấy (Pending)
+                </p>
               </div>
             </div>
           </div>
@@ -332,10 +420,14 @@ export default function DashboardPage() {
             {/* Custom SVG Donut Chart Card */}
             <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col justify-between">
               <div>
-                <h2 className="text-lg font-bold text-slate-800">Tỷ lệ phân bổ trạng thái đơn</h2>
-                <p className="text-xs text-slate-500 mt-1">Phần trăm phân bổ đơn hàng dựa trên trạng thái</p>
+                <h2 className="text-lg font-bold text-slate-800">
+                  Tỷ lệ phân bổ trạng thái đơn
+                </h2>
+                <p className="text-xs text-slate-500 mt-1">
+                  Phần trăm phân bổ đơn hàng dựa trên trạng thái
+                </p>
               </div>
-              
+
               <div className="flex flex-col sm:flex-row items-center justify-around py-8 gap-8">
                 {/* SVG Donut */}
                 <div className="relative w-44 h-44">
@@ -350,40 +442,56 @@ export default function DashboardPage() {
                       strokeWidth="12"
                     />
                     {/* Render slices */}
-                    {totalOrders > 0 && donutSlices.map((slice, i) => (
-                      <circle
-                        key={slice.status}
-                        cx="60"
-                        cy="60"
-                        r={donutRadius}
-                        fill="transparent"
-                        stroke={slice.color}
-                        strokeWidth="12"
-                        strokeDasharray={`${slice.strokeLength} ${slice.strokeGap}`}
-                        strokeDashoffset={slice.strokeOffset}
-                        transform="rotate(-90 60 60)"
-                        className="transition-all duration-700 ease-out"
-                      />
-                    ))}
+                    {totalOrders > 0 &&
+                      donutSlices.map((slice) => (
+                        <circle
+                          key={slice.status}
+                          cx="60"
+                          cy="60"
+                          r={donutRadius}
+                          fill="transparent"
+                          stroke={slice.color}
+                          strokeWidth="12"
+                          strokeDasharray={`${slice.strokeLength} ${slice.strokeGap}`}
+                          strokeDashoffset={slice.strokeOffset}
+                          transform="rotate(-90 60 60)"
+                          className="transition-all duration-700 ease-out"
+                        />
+                      ))}
                   </svg>
                   {/* Central Text */}
                   <div className="absolute inset-0 flex flex-col justify-center items-center">
-                    <span className="text-2xl font-black text-slate-800 tracking-tight">{totalOrders}</span>
-                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Đơn hàng</span>
+                    <span className="text-2xl font-black text-slate-800 tracking-tight">
+                      {totalOrders}
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                      Đơn hàng
+                    </span>
                   </div>
                 </div>
 
                 {/* Donut Legend */}
                 <div className="space-y-3.5 w-full sm:w-auto">
                   {donutSlices.map((slice) => (
-                    <div key={slice.status} className="flex items-center justify-between sm:justify-start gap-6 text-sm">
+                    <div
+                      key={slice.status}
+                      className="flex items-center justify-between sm:justify-start gap-6 text-sm"
+                    >
                       <div className="flex items-center gap-2.5">
-                        <span className={`w-3.5 h-3.5 rounded-md ${getStatusBgColor(slice.status)}`} />
-                        <span className="font-semibold text-slate-700 w-24">{translateStatus(slice.status)}</span>
+                        <span
+                          className={`w-3.5 h-3.5 rounded-md ${getStatusBgColor(slice.status)}`}
+                        />
+                        <span className="font-semibold text-slate-700 w-24">
+                          {translateStatus(slice.status)}
+                        </span>
                       </div>
                       <div className="text-right">
-                        <span className="font-bold text-slate-800">{slice.count} đơn</span>
-                        <span className="text-xs text-slate-400 ml-2 font-medium">({slice.percentage}%)</span>
+                        <span className="font-bold text-slate-800">
+                          {slice.count} đơn
+                        </span>
+                        <span className="text-xs text-slate-400 ml-2 font-medium">
+                          ({slice.percentage}%)
+                        </span>
                       </div>
                     </div>
                   ))}
@@ -394,8 +502,12 @@ export default function DashboardPage() {
             {/* Custom SVG Bar Chart Card */}
             <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col justify-between">
               <div>
-                <h2 className="text-lg font-bold text-slate-800">Số lượng đơn hàng chi tiết</h2>
-                <p className="text-xs text-slate-500 mt-1">Biểu đồ so sánh cột giữa các trạng thái chính</p>
+                <h2 className="text-lg font-bold text-slate-800">
+                  Số lượng đơn hàng chi tiết
+                </h2>
+                <p className="text-xs text-slate-500 mt-1">
+                  Biểu đồ so sánh cột giữa các trạng thái chính
+                </p>
               </div>
 
               {/* SVG Bar Chart */}
@@ -404,18 +516,21 @@ export default function DashboardPage() {
                   {statsData.map((item) => {
                     const barHeight = (item.count / maxCount) * barChartHeight;
                     return (
-                      <div key={item.status} className="flex flex-col items-center group w-16 relative">
+                      <div
+                        key={item.status}
+                        className="flex flex-col items-center group w-16 relative"
+                      >
                         {/* Tooltip value */}
                         <div className="absolute -top-7 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-800 text-white text-[10px] px-2 py-0.5 rounded font-bold pointer-events-none whitespace-nowrap shadow">
                           {item.count} đơn
                         </div>
                         {/* Bar */}
-                        <div 
+                        <div
                           className="w-8 rounded-t-lg transition-all duration-700 ease-out cursor-pointer hover:brightness-95"
-                          style={{ 
-                            height: `${Math.max(barHeight, 6)}px`, 
+                          style={{
+                            height: `${Math.max(barHeight, 6)}px`,
                             backgroundColor: getStatusColor(item.status),
-                            boxShadow: `0 4px 6px -1px ${getStatusColor(item.status)}20`
+                            boxShadow: `0 4px 6px -1px ${getStatusColor(item.status)}20`,
                           }}
                         />
                         <span className="text-[10px] text-slate-400 font-bold mt-2 truncate w-full text-center">
@@ -441,8 +556,12 @@ export default function DashboardPage() {
           <div>
             <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
               <div>
-                <h2 className="text-lg font-bold text-slate-800">Đơn hàng mới nhận</h2>
-                <p className="text-xs text-slate-500 mt-1">Danh sách đơn hàng đang chờ điều phối chuyến xe</p>
+                <h2 className="text-lg font-bold text-slate-800">
+                  Đơn hàng mới nhận
+                </h2>
+                <p className="text-xs text-slate-500 mt-1">
+                  Danh sách đơn hàng đang chờ điều phối chuyến xe
+                </p>
               </div>
               <button className="text-xs text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-1 transition-colors">
                 Xem tất cả
@@ -464,27 +583,52 @@ export default function DashboardPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-sm">
                   {mockRecentOrders.map((order) => (
-                    <tr key={order.id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-6 py-4 font-semibold text-slate-900">{order.id}</td>
-                      <td className="px-6 py-4 text-slate-700">{order.customer}</td>
-                      <td className="px-6 py-4 text-slate-600">{order.destination}</td>
-                      <td className="px-6 py-4 text-slate-600">{order.weight}</td>
+                    <tr
+                      key={order.id}
+                      className="hover:bg-slate-50/50 transition-colors"
+                    >
+                      <td className="px-6 py-4 font-semibold text-slate-900">
+                        {order.id}
+                      </td>
+                      <td className="px-6 py-4 text-slate-700">
+                        {order.customer}
+                      </td>
+                      <td className="px-6 py-4 text-slate-600">
+                        {order.destination}
+                      </td>
+                      <td className="px-6 py-4 text-slate-600">
+                        {order.weight}
+                      </td>
                       <td className="px-6 py-4">
-                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
-                          order.status === "PENDING" ? "bg-amber-50 text-amber-700 border border-amber-200" :
-                          order.status === "PICKED_UP" ? "bg-blue-50 text-blue-700 border border-blue-200" :
-                          order.status === "IN_TRANSIT" ? "bg-purple-50 text-purple-700 border border-purple-200" :
-                          "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                        }`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${
-                            order.status === "PENDING" ? "bg-amber-500" :
-                            order.status === "PICKED_UP" ? "bg-blue-500" :
-                            order.status === "IN_TRANSIT" ? "bg-purple-500" :
-                            "bg-emerald-500"
-                          }`} />
-                          {order.status === "PENDING" ? "Chờ xử lý" :
-                           order.status === "PICKED_UP" ? "Đã lấy" :
-                           order.status === "IN_TRANSIT" ? "Đang giao" : "Thành công"}
+                        <span
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
+                            order.status === "PENDING"
+                              ? "bg-amber-50 text-amber-700 border border-amber-200"
+                              : order.status === "PICKED_UP"
+                                ? "bg-blue-50 text-blue-700 border border-blue-200"
+                                : order.status === "IN_TRANSIT"
+                                  ? "bg-purple-50 text-purple-700 border border-purple-200"
+                                  : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                          }`}
+                        >
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full ${
+                              order.status === "PENDING"
+                                ? "bg-amber-500"
+                                : order.status === "PICKED_UP"
+                                  ? "bg-blue-500"
+                                  : order.status === "IN_TRANSIT"
+                                    ? "bg-purple-500"
+                                    : "bg-emerald-500"
+                            }`}
+                          />
+                          {order.status === "PENDING"
+                            ? "Chờ xử lý"
+                            : order.status === "PICKED_UP"
+                              ? "Đã lấy"
+                              : order.status === "IN_TRANSIT"
+                                ? "Đang giao"
+                                : "Thành công"}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-right">
@@ -499,15 +643,21 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="p-4 border-t border-slate-100 bg-slate-50/20 text-center">
-            <span className="text-xs text-slate-400">Hiển thị 5 trên tổng số 14 đơn hàng chờ điều phối.</span>
+            <span className="text-xs text-slate-400">
+              Hiển thị 5 trên tổng số 14 đơn hàng chờ điều phối.
+            </span>
           </div>
         </div>
 
         {/* Right Column: Active Feed & Notifications (1/3 width) */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-6">
           <div>
-            <h2 className="text-lg font-bold text-slate-800">Hoạt động bưu cục</h2>
-            <p className="text-xs text-slate-500 mt-1">Nhật ký vận hành bưu cục thời gian thực</p>
+            <h2 className="text-lg font-bold text-slate-800">
+              Hoạt động bưu cục
+            </h2>
+            <p className="text-xs text-slate-500 mt-1">
+              Nhật ký vận hành bưu cục thời gian thực
+            </p>
           </div>
 
           <div className="relative pl-6 space-y-6 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-150">
@@ -517,9 +667,15 @@ export default function DashboardPage() {
                 <Clock className="w-3 h-3" />
               </span>
               <div>
-                <p className="text-sm font-semibold text-slate-800">Cảnh báo trễ chuyến xe</p>
-                <p className="text-xs text-slate-500 mt-0.5">Chuyến xe #SHIP-298 đi Hải Phòng trễ 15 phút do thời tiết.</p>
-                <span className="text-[10px] text-slate-400 mt-2 block font-medium">5 phút trước</span>
+                <p className="text-sm font-semibold text-slate-800">
+                  Cảnh báo trễ chuyến xe
+                </p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Chuyến xe #SHIP-298 đi Hải Phòng trễ 15 phút do thời tiết.
+                </p>
+                <span className="text-[10px] text-slate-400 mt-2 block font-medium">
+                  5 phút trước
+                </span>
               </div>
             </div>
 
@@ -529,9 +685,15 @@ export default function DashboardPage() {
                 <CheckCircle2 className="w-3 h-3" />
               </span>
               <div>
-                <p className="text-sm font-semibold text-slate-800">Giao hàng thành công</p>
-                <p className="text-xs text-slate-500 mt-0.5">Shipper Nguyễn Hoàng Nam đã hoàn thành đơn hàng #ORD-9428.</p>
-                <span className="text-[10px] text-slate-400 mt-2 block font-medium">20 phút trước</span>
+                <p className="text-sm font-semibold text-slate-800">
+                  Giao hàng thành công
+                </p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Shipper Nguyễn Hoàng Nam đã hoàn thành đơn hàng #ORD-9428.
+                </p>
+                <span className="text-[10px] text-slate-400 mt-2 block font-medium">
+                  20 phút trước
+                </span>
               </div>
             </div>
 
@@ -541,9 +703,15 @@ export default function DashboardPage() {
                 <Truck className="w-3 h-3" />
               </span>
               <div>
-                <p className="text-sm font-semibold text-slate-800">Khởi hành chuyến xe</p>
-                <p className="text-xs text-slate-500 mt-0.5">Tài xế Vũ Văn Bách đã xuất bến tuyến Cầu Giấy - Hà Đông.</p>
-                <span className="text-[10px] text-slate-400 mt-2 block font-medium">45 phút trước</span>
+                <p className="text-sm font-semibold text-slate-800">
+                  Khởi hành chuyến xe
+                </p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Tài xế Vũ Văn Bách đã xuất bến tuyến Cầu Giấy - Hà Đông.
+                </p>
+                <span className="text-[10px] text-slate-400 mt-2 block font-medium">
+                  45 phút trước
+                </span>
               </div>
             </div>
 
@@ -553,9 +721,16 @@ export default function DashboardPage() {
                 <AlertTriangle className="w-3 h-3" />
               </span>
               <div>
-                <p className="text-sm font-semibold text-slate-800">Báo lỗi sự cố</p>
-                <p className="text-xs text-slate-500 mt-0.5">Yêu cầu hỗ trợ kỹ thuật tại Bưu cục Hải Phòng: Hỏng máy quét mã vạch.</p>
-                <span className="text-[10px] text-slate-400 mt-2 block font-medium">1 giờ trước</span>
+                <p className="text-sm font-semibold text-slate-800">
+                  Báo lỗi sự cố
+                </p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Yêu cầu hỗ trợ kỹ thuật tại Bưu cục Hải Phòng: Hỏng máy quét
+                  mã vạch.
+                </p>
+                <span className="text-[10px] text-slate-400 mt-2 block font-medium">
+                  1 giờ trước
+                </span>
               </div>
             </div>
           </div>
@@ -564,4 +739,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
