@@ -1,19 +1,23 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { 
   Package, 
   Truck, 
   Building2, 
   BarChart3, 
   TrendingUp, 
-  TrendingDown, 
   Plus, 
   ArrowUpRight, 
   Clock, 
   CheckCircle2, 
-  AlertTriangle 
+  AlertTriangle,
+  LogOut,
+  RefreshCw,
+  AlertCircle
 } from "lucide-react";
+import api from "@/lib/axios";
 
 // Định nghĩa kiểu dữ liệu User
 interface LoggedInUser {
@@ -23,7 +27,12 @@ interface LoggedInUser {
   role: string;
 }
 
-// Mock data cho danh sách đơn hàng mới cần điều phối
+// Cấu trúc dữ liệu API thống kê đơn hàng
+interface OrderStatItem {
+  status: string;
+  count: number;
+}
+
 const mockRecentOrders = [
   { id: "ORD-9481", customer: "Nguyễn Văn A", destination: "Bưu cục Cầu Giấy", weight: "4.5 kg", status: "PENDING", time: "10 phút trước" },
   { id: "ORD-9482", customer: "Trần Thị B", destination: "Bưu cục Quận 1", weight: "12.0 kg", status: "PICKED_UP", time: "25 phút trước" },
@@ -33,8 +42,16 @@ const mockRecentOrders = [
 ];
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [user, setUser] = useState<LoggedInUser | null>(null);
+  
+  // Các trạng thái dữ liệu thống kê
+  const [statsData, setStatsData] = useState<OrderStatItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isDemoMode, setIsDemoMode] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
+  // Load thông tin người dùng từ localStorage
   useEffect(() => {
     if (typeof window !== "undefined") {
       const savedUser = localStorage.getItem("user");
@@ -47,6 +64,57 @@ export default function DashboardPage() {
       }
     }
   }, []);
+
+  // Fetch dữ liệu thống kê từ API
+  const fetchStatistics = async (showRefreshIndicator = false) => {
+    if (showRefreshIndicator) setIsRefreshing(true);
+    else setIsLoading(true);
+
+    try {
+      const response = await api.get("/orders/statistics");
+      // Dữ liệu API trả về có dạng: { message: string, data: OrderStatItem[] } hoặc trực tiếp mảng
+      const data = response.data?.data || response.data || [];
+      
+      if (Array.isArray(data) && data.length > 0) {
+        setStatsData(data);
+        setIsDemoMode(false);
+      } else {
+        throw new Error("Dữ liệu thống kê không hợp lệ");
+      }
+    } catch (error) {
+      console.warn("Không kết nối được API /orders/statistics. Sử dụng dữ liệu giả lập.", error);
+      // Fallback sang dữ liệu giả lập (Demo Mode)
+      setStatsData([
+        { status: "PENDING", count: 320 },
+        { status: "DELIVERING", count: 450 },
+        { status: "FINISHED", count: 420 },
+        { status: "CANCELLED", count: 58 }
+      ]);
+      setIsDemoMode(true);
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchStatistics();
+  }, []);
+
+  // Thực hiện Đăng xuất gọi API POST /auth/logout
+  const handleLogout = async () => {
+    try {
+      await api.post("/auth/logout");
+    } catch (e) {
+      console.error("Lỗi khi gọi API đăng xuất ở backend:", e);
+    } finally {
+      localStorage.removeItem("token");
+      localStorage.removeItem("refresh_token");
+      localStorage.removeItem("user");
+      router.push("/");
+      router.refresh();
+    }
+  };
 
   const getRoleLabel = (role: string) => {
     switch (role) {
@@ -61,8 +129,92 @@ export default function DashboardPage() {
     }
   };
 
+  // Tính toán các dữ liệu tổng hợp
+  const getStatusCount = (status: string) => {
+    const item = statsData.find(s => s.status === status);
+    return item ? item.count : 0;
+  };
+
+  const totalOrders = statsData.reduce((acc, curr) => acc + curr.count, 0);
+  const finishedCount = getStatusCount("FINISHED");
+  const deliveringCount = getStatusCount("DELIVERING");
+  const pendingCount = getStatusCount("PENDING");
+  const cancelledCount = getStatusCount("CANCELLED");
+
+  // Quy đổi tên trạng thái sang Tiếng Việt
+  const translateStatus = (status: string) => {
+    switch (status) {
+      case "PENDING": return "Chờ xử lý";
+      case "DELIVERING": return "Đang giao";
+      case "FINISHED": return "Hoàn thành";
+      case "CANCELLED": return "Đã hủy";
+      default: return status;
+    }
+  };
+
+  // Màu sắc tương ứng cho các trạng thái
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "PENDING": return "#F59E0B"; // Amber
+      case "DELIVERING": return "#3B82F6"; // Blue
+      case "FINISHED": return "#10B981"; // Emerald
+      case "CANCELLED": return "#EF4444"; // Red
+      default: return "#64748B"; // Slate
+    }
+  };
+
+  const getStatusBgColor = (status: string) => {
+    switch (status) {
+      case "PENDING": return "bg-amber-500";
+      case "DELIVERING": return "bg-blue-500";
+      case "FINISHED": return "bg-emerald-500";
+      case "CANCELLED": return "bg-red-500";
+      default: return "bg-slate-500";
+    }
+  };
+
+  // LOGIC VẼ BIỂU ĐỒ TRÒN DONUT
+  // Đường tròn bán kính r=50 -> Chu vi = 2 * pi * r = 314.16
+  const donutRadius = 50;
+  const donutCircumference = 2 * Math.PI * donutRadius; // 314.159
+  let accumulatedPercentage = 0;
+
+  const donutSlices = statsData.map((item) => {
+    const count = item.count;
+    const percentage = totalOrders > 0 ? count / totalOrders : 0;
+    const strokeLength = percentage * donutCircumference;
+    const strokeGap = donutCircumference - strokeLength;
+    const strokeOffset = accumulatedPercentage * donutCircumference;
+    
+    accumulatedPercentage += percentage;
+
+    return {
+      status: item.status,
+      count,
+      percentage: (percentage * 100).toFixed(1),
+      strokeLength,
+      strokeGap,
+      strokeOffset: -strokeOffset,
+      color: getStatusColor(item.status)
+    };
+  });
+
+  // LOGIC VẼ BIỂU ĐỒ CỘT (BAR CHART)
+  const maxCount = Math.max(...statsData.map(s => s.count), 1);
+  const barChartHeight = 160;
+
   return (
     <div className="space-y-8 animate-fadeIn">
+      {/* Fallback Warning Alert for Demo Mode */}
+      {isDemoMode && (
+        <div className="p-4 bg-amber-50 border border-amber-200 text-amber-900 rounded-2xl flex items-start gap-3 shadow-sm">
+          <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+          <div className="text-xs">
+            <span className="font-bold">Đang chạy ở chế độ giả lập (Demo Mode):</span> Không kết nối được tới API thống kê đơn hàng của Backend (`http://localhost:3333/orders/statistics`). Dưới đây là thông số giả lập để hỗ trợ xem trước UI.
+          </div>
+        </div>
+      )}
+
       {/* Welcome Banner */}
       <div className="relative overflow-hidden bg-gradient-to-r from-slate-900 to-blue-950 rounded-2xl p-6 sm:p-8 border border-slate-800 shadow-lg">
         {/* Decorative ambient light */}
@@ -80,89 +232,209 @@ export default function DashboardPage() {
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
-            <button className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm rounded-xl transition-all shadow-md shadow-blue-900/20 active:scale-[0.98] cursor-pointer">
-              <Plus className="w-4 h-4" />
-              Tạo đơn hàng mới
+            <button 
+              onClick={() => fetchStatistics(true)}
+              disabled={isRefreshing}
+              className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-slate-600 font-medium text-sm rounded-xl transition-all active:scale-[0.98] cursor-pointer disabled:opacity-55"
+            >
+              <RefreshCw className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`} />
+              Làm mới số liệu
             </button>
-            <button className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-slate-600 font-medium text-sm rounded-xl transition-all active:scale-[0.98] cursor-pointer">
-              <Truck className="w-4 h-4" />
-              Tạo chuyến xe mới
+            <button 
+              onClick={handleLogout}
+              className="flex items-center gap-2 px-4 py-2.5 bg-red-650 hover:bg-red-700 text-white font-medium text-sm rounded-xl transition-all shadow-md shadow-red-950/20 active:scale-[0.98] cursor-pointer"
+            >
+              <LogOut className="w-4 h-4" />
+              Đăng xuất
             </button>
           </div>
         </div>
       </div>
 
-      {/* Statistics Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        {/* Card 1 */}
-        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-all group hover:-translate-y-0.5">
-          <div className="flex justify-between items-start">
-            <div className="p-3 bg-blue-50 text-blue-600 rounded-xl group-hover:bg-blue-600 group-hover:text-white transition-all">
-              <Package className="w-6 h-6" />
-            </div>
-            <span className="flex items-center gap-1 text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md">
-              <TrendingUp className="w-3.5 h-3.5" />
-              +12.4%
-            </span>
-          </div>
-          <div className="mt-4">
-            <h3 className="text-2xl font-bold text-slate-800 tracking-tight">1,248</h3>
-            <p className="text-slate-500 text-sm font-medium mt-1">Đơn hàng đang xử lý</p>
-          </div>
+      {/* Loading state indicator */}
+      {isLoading ? (
+        <div className="min-h-[300px] flex flex-col justify-center items-center gap-4 bg-white rounded-2xl border border-slate-200 p-12">
+          <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-slate-500 text-sm font-medium">Đang đồng bộ số liệu đơn hàng động...</p>
         </div>
-
-        {/* Card 2 */}
-        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-all group hover:-translate-y-0.5">
-          <div className="flex justify-between items-start">
-            <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl group-hover:bg-emerald-600 group-hover:text-white transition-all">
-              <Truck className="w-6 h-6" />
+      ) : (
+        <>
+          {/* Statistics Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {/* Total Orders Card */}
+            <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-all group hover:-translate-y-0.5">
+              <div className="flex justify-between items-start">
+                <div className="p-3 bg-slate-100 text-slate-600 rounded-xl group-hover:bg-slate-900 group-hover:text-white transition-all">
+                  <Package className="w-6 h-6" />
+                </div>
+                <span className="flex items-center gap-1 text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md">
+                  <TrendingUp className="w-3.5 h-3.5" />
+                  +12.4%
+                </span>
+              </div>
+              <div className="mt-4">
+                <h3 className="text-2xl font-bold text-slate-800 tracking-tight">{totalOrders}</h3>
+                <p className="text-slate-500 text-sm font-medium mt-1">Tổng đơn liên kết</p>
+              </div>
             </div>
-            <span className="flex items-center gap-1 text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md">
-              <TrendingUp className="w-3.5 h-3.5" />
-              +5.2%
-            </span>
-          </div>
-          <div className="mt-4">
-            <h3 className="text-2xl font-bold text-slate-800 tracking-tight">42 Chuyến</h3>
-            <p className="text-slate-500 text-sm font-medium mt-1">Xe đang vận chuyển</p>
-          </div>
-        </div>
 
-        {/* Card 3 */}
-        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-all group hover:-translate-y-0.5">
-          <div className="flex justify-between items-start">
-            <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl group-hover:bg-indigo-600 group-hover:text-white transition-all">
-              <Building2 className="w-6 h-6" />
+            {/* Delivering Card */}
+            <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-all group hover:-translate-y-0.5">
+              <div className="flex justify-between items-start">
+                <div className="p-3 bg-blue-50 text-blue-600 rounded-xl group-hover:bg-blue-600 group-hover:text-white transition-all">
+                  <Truck className="w-6 h-6" />
+                </div>
+                <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded-md">
+                  Đang giao hàng
+                </span>
+              </div>
+              <div className="mt-4">
+                <h3 className="text-2xl font-bold text-slate-800 tracking-tight">{deliveringCount}</h3>
+                <p className="text-slate-500 text-sm font-medium mt-1">Đơn đang giao (Delivering)</p>
+              </div>
             </div>
-            <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-1 rounded-md">
-              Ổn định
-            </span>
-          </div>
-          <div className="mt-4">
-            <h3 className="text-2xl font-bold text-slate-800 tracking-tight">18 Bưu cục</h3>
-            <p className="text-slate-500 text-sm font-medium mt-1">Hệ thống kho vận hành</p>
-          </div>
-        </div>
 
-        {/* Card 4 */}
-        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-all group hover:-translate-y-0.5">
-          <div className="flex justify-between items-start">
-            <div className="p-3 bg-purple-50 text-purple-600 rounded-xl group-hover:bg-purple-600 group-hover:text-white transition-all">
-              <BarChart3 className="w-6 h-6" />
+            {/* Finished Card */}
+            <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-all group hover:-translate-y-0.5">
+              <div className="flex justify-between items-start">
+                <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl group-hover:bg-emerald-600 group-hover:text-white transition-all">
+                  <CheckCircle2 className="w-6 h-6" />
+                </div>
+                <span className="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md">
+                  Thành công
+                </span>
+              </div>
+              <div className="mt-4">
+                <h3 className="text-2xl font-bold text-slate-800 tracking-tight">{finishedCount}</h3>
+                <p className="text-slate-500 text-sm font-medium mt-1">Đơn thành công (Finished)</p>
+              </div>
             </div>
-            <span className="flex items-center gap-1 text-xs font-semibold text-red-600 bg-red-50 px-2 py-1 rounded-md">
-              <TrendingDown className="w-3.5 h-3.5" />
-              -0.3%
-            </span>
-          </div>
-          <div className="mt-4">
-            <h3 className="text-2xl font-bold text-slate-800 tracking-tight">98.4%</h3>
-            <p className="text-slate-500 text-sm font-medium mt-1">Tỷ lệ giao hàng SLA</p>
-          </div>
-        </div>
-      </div>
 
-      {/* Main Grid Section */}
+            {/* Pending Card */}
+            <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-all group hover:-translate-y-0.5">
+              <div className="flex justify-between items-start">
+                <div className="p-3 bg-amber-50 text-amber-600 rounded-xl group-hover:bg-amber-600 group-hover:text-white transition-all">
+                  <Clock className="w-6 h-6" />
+                </div>
+                <span className="text-xs font-medium text-amber-600 bg-amber-50 px-2 py-1 rounded-md">
+                  Chờ điều phối
+                </span>
+              </div>
+              <div className="mt-4">
+                <h3 className="text-2xl font-bold text-slate-800 tracking-tight">{pendingCount}</h3>
+                <p className="text-slate-500 text-sm font-medium mt-1">Đơn chờ đi lấy (Pending)</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Charts Section */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* Custom SVG Donut Chart Card */}
+            <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-slate-800">Tỷ lệ phân bổ trạng thái đơn</h2>
+                <p className="text-xs text-slate-500 mt-1">Phần trăm phân bổ đơn hàng dựa trên trạng thái</p>
+              </div>
+              
+              <div className="flex flex-col sm:flex-row items-center justify-around py-8 gap-8">
+                {/* SVG Donut */}
+                <div className="relative w-44 h-44">
+                  <svg className="w-full h-full" viewBox="0 0 120 120">
+                    {/* Background circle */}
+                    <circle
+                      cx="60"
+                      cy="60"
+                      r={donutRadius}
+                      fill="transparent"
+                      stroke="#F1F5F9"
+                      strokeWidth="12"
+                    />
+                    {/* Render slices */}
+                    {totalOrders > 0 && donutSlices.map((slice, i) => (
+                      <circle
+                        key={slice.status}
+                        cx="60"
+                        cy="60"
+                        r={donutRadius}
+                        fill="transparent"
+                        stroke={slice.color}
+                        strokeWidth="12"
+                        strokeDasharray={`${slice.strokeLength} ${slice.strokeGap}`}
+                        strokeDashoffset={slice.strokeOffset}
+                        transform="rotate(-90 60 60)"
+                        className="transition-all duration-700 ease-out"
+                      />
+                    ))}
+                  </svg>
+                  {/* Central Text */}
+                  <div className="absolute inset-0 flex flex-col justify-center items-center">
+                    <span className="text-2xl font-black text-slate-800 tracking-tight">{totalOrders}</span>
+                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Đơn hàng</span>
+                  </div>
+                </div>
+
+                {/* Donut Legend */}
+                <div className="space-y-3.5 w-full sm:w-auto">
+                  {donutSlices.map((slice) => (
+                    <div key={slice.status} className="flex items-center justify-between sm:justify-start gap-6 text-sm">
+                      <div className="flex items-center gap-2.5">
+                        <span className={`w-3.5 h-3.5 rounded-md ${getStatusBgColor(slice.status)}`} />
+                        <span className="font-semibold text-slate-700 w-24">{translateStatus(slice.status)}</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="font-bold text-slate-800">{slice.count} đơn</span>
+                        <span className="text-xs text-slate-400 ml-2 font-medium">({slice.percentage}%)</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Custom SVG Bar Chart Card */}
+            <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-slate-800">Số lượng đơn hàng chi tiết</h2>
+                <p className="text-xs text-slate-500 mt-1">Biểu đồ so sánh cột giữa các trạng thái chính</p>
+              </div>
+
+              {/* SVG Bar Chart */}
+              <div className="relative py-6">
+                <div className="w-full h-48 flex items-end justify-around border-b border-slate-200 px-4">
+                  {statsData.map((item) => {
+                    const barHeight = (item.count / maxCount) * barChartHeight;
+                    return (
+                      <div key={item.status} className="flex flex-col items-center group w-16 relative">
+                        {/* Tooltip value */}
+                        <div className="absolute -top-7 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-800 text-white text-[10px] px-2 py-0.5 rounded font-bold pointer-events-none whitespace-nowrap shadow">
+                          {item.count} đơn
+                        </div>
+                        {/* Bar */}
+                        <div 
+                          className="w-8 rounded-t-lg transition-all duration-700 ease-out cursor-pointer hover:brightness-95"
+                          style={{ 
+                            height: `${Math.max(barHeight, 6)}px`, 
+                            backgroundColor: getStatusColor(item.status),
+                            boxShadow: `0 4px 6px -1px ${getStatusColor(item.status)}20`
+                          }}
+                        />
+                        <span className="text-[10px] text-slate-400 font-bold mt-2 truncate w-full text-center">
+                          {translateStatus(item.status)}
+                        </span>
+                        <span className="text-xs font-extrabold text-slate-800 mt-0.5">
+                          {item.count}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Main Grid Section: Recent Orders */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Left Column: Recent Orders (2/3 width) */}
         <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col justify-between">
@@ -292,3 +564,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+
