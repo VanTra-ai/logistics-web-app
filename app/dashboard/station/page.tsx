@@ -33,6 +33,7 @@ export default function StationPage() {
   const [shippers, setShippers] = useState<Shipper[]>([]);
   const [selectedShipperId, setSelectedShipperId] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const processingScans = useRef<Set<string>>(new Set());
 
   // Trạng thái phản hồi quét
   const [scanResult, setScanResult] = useState<{
@@ -118,6 +119,16 @@ export default function StationPage() {
     e.preventDefault();
     const trackingNum = trackingInput.trim().toUpperCase();
     if (!trackingNum) return;
+
+    if (processingScans.current.has(trackingNum)) {
+      console.warn("Mã vận đơn đang được xử lý quét:", trackingNum);
+      return;
+    }
+
+    processingScans.current.add(trackingNum);
+    setTimeout(() => {
+      processingScans.current.delete(trackingNum);
+    }, 2000);
 
     setIsLoading(true);
     setTrackingInput("");
