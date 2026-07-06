@@ -17,6 +17,7 @@ import {
   Users,
   ScanLine,
   AlertCircle,
+  Coins,
 } from "lucide-react";
 import api from "@/lib/axios";
 
@@ -65,13 +66,9 @@ export default function DashboardLayout({
     return [
       { name: "Tổng quan", href: "/dashboard", icon: LayoutDashboard },
       { name: "Quản lý Đơn hàng", href: "/dashboard/orders", icon: Package },
-      {
-        name: "Điều phối Chuyến xe",
-        href: "/dashboard/shipments",
-        icon: Truck,
-      },
       { name: "Hệ thống Bưu cục", href: "/dashboard/hubs", icon: Building2 },
       { name: "Quản lý Nhân sự", href: "/dashboard/users", icon: Users },
+      { name: "Quản lý Tài chính", href: "/dashboard/finance", icon: Coins },
       { name: "Báo cáo & SLA", href: "/dashboard/statistics", icon: BarChart3 },
       { name: "Cài đặt", href: "/dashboard/settings", icon: Settings },
     ];

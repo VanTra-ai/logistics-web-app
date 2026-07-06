@@ -29,6 +29,7 @@ interface Hub {
 
 interface User {
   id: string;
+  employee_code?: string | null;
   email: string;
   phone_number: string;
   address?: string;
@@ -674,7 +675,11 @@ export default function UsersManagementPage() {
                             {item.full_name}
                           </span>
                           <span className="text-[10px] text-slate-400 font-medium block">
-                            Ngày tham gia: {formatDate(item.created_at)}
+                            Mã:{" "}
+                            <strong className="text-blue-600">
+                              {item.employee_code || "Chưa cấp"}
+                            </strong>{" "}
+                            | Ngày tham gia: {formatDate(item.created_at)}
                           </span>
                         </div>
                       </div>
@@ -876,7 +881,10 @@ export default function UsersManagementPage() {
                   className="block w-full px-3 py-2.5 bg-slate-50 border border-slate-250 text-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm font-medium"
                   value={formData.role}
                   onChange={(e) =>
-                    setFormData({ ...formData, role: e.target.value as User["role"] })
+                    setFormData({
+                      ...formData,
+                      role: e.target.value as User["role"],
+                    })
                   }
                 >
                   <option value="SHIPPER">Shipper giao hàng (SHIPPER)</option>
@@ -1016,7 +1024,10 @@ export default function UsersManagementPage() {
                   className="block w-full px-3 py-2.5 bg-slate-50 border border-slate-250 text-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm font-medium"
                   value={formData.role}
                   onChange={(e) =>
-                    setFormData({ ...formData, role: e.target.value as User["role"] })
+                    setFormData({
+                      ...formData,
+                      role: e.target.value as User["role"],
+                    })
                   }
                 >
                   <option value="SHIPPER">Shipper giao hàng (SHIPPER)</option>

@@ -21,6 +21,7 @@ import axios from "axios";
 
 interface Hub {
   id: string;
+  hub_code?: string | null;
   name: string;
   address: string;
   is_active: boolean;
@@ -510,7 +511,14 @@ export default function HubsPage() {
                         <div
                           className={`w-2.5 h-2.5 rounded-full ${hub.is_active ? "bg-emerald-500" : "bg-slate-400"}`}
                         />
-                        {hub.name}
+                        <div>
+                          <span className="block font-semibold text-slate-900">
+                            {hub.name}
+                          </span>
+                          <span className="block text-[10px] text-blue-650 font-mono">
+                            Mã: {hub.hub_code || "Chưa cấp"}
+                          </span>
+                        </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 text-slate-600 max-w-xs md:max-w-sm lg:max-w-md truncate">

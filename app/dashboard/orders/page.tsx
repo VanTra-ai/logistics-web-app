@@ -24,12 +24,14 @@ import api from "@/lib/axios";
 interface Hub {
   id: string;
   name: string;
+  hub_code?: string | null;
 }
 
 interface Shipper {
   id: string;
   full_name: string;
   phone_number: string;
+  employee_code?: string | null;
 }
 
 interface Order {
@@ -42,7 +44,12 @@ interface Order {
   receiver_phone: string;
   receiver_address: string;
   weight: number;
+  length?: number;
+  width?: number;
+  height?: number;
   cod_amount: number;
+  cod_fee?: number;
+  shipping_fee?: number;
   current_status: string;
   created_at: string;
   pickup_hub: Hub;
@@ -52,11 +59,13 @@ interface Order {
   shipment?: {
     id: string;
     vehicle_number: string;
+    shipment_code?: string | null;
   } | null;
 }
 
 interface Shipment {
   id: string;
+  shipment_code?: string | null;
   vehicle_number: string;
   status: string;
   created_at: string;
@@ -121,6 +130,9 @@ export default function OrdersManagementPage() {
     receiver_phone: "",
     receiver_address: "",
     weight: 1,
+    length: 0,
+    width: 0,
+    height: 0,
     cod_amount: 0,
     note: "",
     pickup_hub_id: "",
@@ -419,6 +431,9 @@ export default function OrdersManagementPage() {
           receiver_phone: orderForm.receiver_phone,
           receiver_address: orderForm.receiver_address,
           weight: Number(orderForm.weight),
+          length: Number(orderForm.length),
+          width: Number(orderForm.width),
+          height: Number(orderForm.height),
           cod_amount: Number(orderForm.cod_amount),
           note: orderForm.note,
           pickup_hub_id: orderForm.pickup_hub_id,
@@ -436,6 +451,9 @@ export default function OrdersManagementPage() {
           receiver_phone: orderForm.receiver_phone,
           receiver_address: orderForm.receiver_address,
           weight: Number(orderForm.weight),
+          length: Number(orderForm.length),
+          width: Number(orderForm.width),
+          height: Number(orderForm.height),
           cod_amount: Number(orderForm.cod_amount),
           note: orderForm.note,
           pickup_hub_id: orderForm.pickup_hub_id,
@@ -470,6 +488,9 @@ export default function OrdersManagementPage() {
       receiver_phone: "",
       receiver_address: "",
       weight: 1,
+      length: 0,
+      width: 0,
+      height: 0,
       cod_amount: 0,
       note: "",
       pickup_hub_id: currentUser?.hub?.id || hubs[0]?.id || "",
@@ -489,6 +510,9 @@ export default function OrdersManagementPage() {
       receiver_phone: order.receiver_phone,
       receiver_address: order.receiver_address,
       weight: order.weight,
+      length: order.length || 0,
+      width: order.width || 0,
+      height: order.height || 0,
       cod_amount: order.cod_amount,
       note: order.note || "",
       pickup_hub_id: order.pickup_hub.id,
@@ -1210,14 +1234,25 @@ export default function OrdersManagementPage() {
                           </span>
                         </td>
 
-                        {/* Weight & COD */}
                         <td className="px-6 py-4 space-y-0.5">
                           <span className="font-bold text-slate-700 block">
-                            {item.weight} kg
+                            {item.weight} kg{" "}
+                            {item.length && item.width && item.height
+                              ? `(${item.length}x${item.width}x${item.height}cm)`
+                              : ""}
                           </span>
                           <span className="text-[10px] text-blue-600 font-semibold block">
-                            COD: {item.cod_amount?.toLocaleString()} đ
+                            COD: {item.cod_amount?.toLocaleString()} đ{" "}
+                            {item.cod_fee
+                              ? `(Phí: ${Number(item.cod_fee).toLocaleString()} đ)`
+                              : ""}
                           </span>
+                          {item.shipping_fee && (
+                            <span className="text-[10px] text-slate-550 font-bold block">
+                              Ship: {Number(item.shipping_fee).toLocaleString()}{" "}
+                              đ
+                            </span>
+                          )}
                         </td>
 
                         {/* Order status */}
@@ -1441,6 +1476,11 @@ export default function OrdersManagementPage() {
                             <h3 className="text-md font-extrabold text-slate-800">
                               {ship.vehicle_number}
                             </h3>
+                            {ship.shipment_code && (
+                              <span className="text-[10px] font-mono font-bold text-blue-700 bg-blue-50/50 px-2 py-0.5 rounded border border-blue-200">
+                                {ship.shipment_code}
+                              </span>
+                            )}
                             <span
                               className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
                                 ship.status === "PENDING"
@@ -1756,6 +1796,61 @@ export default function OrdersManagementPage() {
                       </option>
                     ))}
                   </select>
+                </div>
+              </div>
+
+              {/* Package Dimensions */}
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1">
+                    Chiều Dài (cm)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    className="block w-full px-3 py-2 bg-slate-50 border border-slate-250 text-slate-800 text-xs rounded-lg outline-none focus:border-blue-500"
+                    value={orderForm.length}
+                    onChange={(e) =>
+                      setOrderForm({
+                        ...orderForm,
+                        length: Number(e.target.value),
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1">
+                    Chiều Rộng (cm)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    className="block w-full px-3 py-2 bg-slate-50 border border-slate-250 text-slate-800 text-xs rounded-lg outline-none focus:border-blue-500"
+                    value={orderForm.width}
+                    onChange={(e) =>
+                      setOrderForm({
+                        ...orderForm,
+                        width: Number(e.target.value),
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1">
+                    Chiều Cao (cm)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    className="block w-full px-3 py-2 bg-slate-50 border border-slate-250 text-slate-800 text-xs rounded-lg outline-none focus:border-blue-500"
+                    value={orderForm.height}
+                    onChange={(e) =>
+                      setOrderForm({
+                        ...orderForm,
+                        height: Number(e.target.value),
+                      })
+                    }
+                  />
                 </div>
               </div>
 
