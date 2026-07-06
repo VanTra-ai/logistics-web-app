@@ -72,6 +72,7 @@ interface Shipment {
   shipper: Shipper;
   origin_hub: Hub;
   destination_hub: Hub | null;
+  capacity_weight?: number;
   orders: Order[];
 }
 
@@ -143,6 +144,7 @@ export default function OrdersManagementPage() {
     shipper_id: "",
     destination_hub_id: "",
     vehicle_number: "",
+    capacity_weight: 1000,
   });
   const [isSubmitLoading, setIsSubmitLoading] = useState(false);
 
@@ -358,6 +360,40 @@ export default function OrdersManagementPage() {
       setNotification({
         type: "error",
         message: "Vui lòng nhập đầy đủ thông tin bắt buộc!",
+      });
+      return;
+    }
+
+    if (Number(orderForm.weight) <= 0 || Number(orderForm.weight) > 5000) {
+      setNotification({
+        type: "error",
+        message: "Cân nặng phải lớn hơn 0 và nhỏ hơn 5000 kg!",
+      });
+      return;
+    }
+
+    if (
+      Number(orderForm.cod_amount) < 0 ||
+      Number(orderForm.cod_amount) > 500000000
+    ) {
+      setNotification({
+        type: "error",
+        message: "Tiền thu hộ COD phải từ 0đ đến tối đa 500,000,000đ!",
+      });
+      return;
+    }
+
+    if (
+      Number(orderForm.length || 0) < 0 ||
+      Number(orderForm.length || 0) > 500 ||
+      Number(orderForm.width || 0) < 0 ||
+      Number(orderForm.width || 0) > 500 ||
+      Number(orderForm.height || 0) < 0 ||
+      Number(orderForm.height || 0) > 500
+    ) {
+      setNotification({
+        type: "error",
+        message: "Kích thước chiều dài, rộng, cao phải từ 0 đến 500 cm!",
       });
       return;
     }
@@ -860,6 +896,7 @@ export default function OrdersManagementPage() {
           shipper_id: shipmentForm.shipper_id,
           vehicle_number: shipmentForm.vehicle_number.toUpperCase(),
           destination_hub_id: shipmentForm.destination_hub_id || null,
+          capacity_weight: Number(shipmentForm.capacity_weight),
         });
         setNotification({
           type: "success",
@@ -872,6 +909,7 @@ export default function OrdersManagementPage() {
           origin_hub_id: originId,
           destination_hub_id: shipmentForm.destination_hub_id || undefined,
           vehicle_number: shipmentForm.vehicle_number.toUpperCase(),
+          capacity_weight: Number(shipmentForm.capacity_weight),
         });
         setNotification({
           type: "success",
@@ -898,6 +936,7 @@ export default function OrdersManagementPage() {
       shipper_id: shippers.length > 0 ? shippers[0].id : "",
       destination_hub_id: "",
       vehicle_number: "",
+      capacity_weight: 1000,
     });
     setIsShipmentModalOpen(true);
   };
@@ -909,6 +948,7 @@ export default function OrdersManagementPage() {
       shipper_id: ship.shipper.id,
       destination_hub_id: ship.destination_hub?.id || "",
       vehicle_number: ship.vehicle_number,
+      capacity_weight: Number(ship.capacity_weight) || 1000,
     });
     setIsShipmentModalOpen(true);
   };
@@ -1458,7 +1498,7 @@ export default function OrdersManagementPage() {
             ) : (
               filteredShipments.map((ship) => {
                 const totalWeight = getShipmentWeight(ship);
-                const maxWeight = 1000;
+                const maxWeight = Number(ship.capacity_weight) || 1000;
                 const fillRate = Math.min(
                   Math.round((totalWeight / maxWeight) * 100),
                   100,
@@ -1978,6 +2018,25 @@ export default function OrdersManagementPage() {
                       </option>
                     ))}
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">
+                  Tải trọng xe tối đa (kg)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  required
+                  className="block w-full px-3 py-2 bg-slate-50 border border-slate-250 text-slate-800 text-xs rounded-xl outline-none"
+                  value={shipmentForm.capacity_weight}
+                  onChange={(e) =>
+                    setShipmentForm({
+                      ...shipmentForm,
+                      capacity_weight: Number(e.target.value),
+                    })
+                  }
+                />
               </div>
 
               <div className="flex justify-end gap-2 pt-4 border-t border-slate-150">

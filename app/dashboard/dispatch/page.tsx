@@ -43,6 +43,7 @@ interface Shipment {
   shipper: Shipper;
   origin_hub: Hub;
   destination_hub: Hub | null;
+  capacity_weight?: number;
   orders: Order[];
 }
 
@@ -80,6 +81,7 @@ export default function DispatchPage() {
     shipper_id: "",
     destination_hub_id: "",
     vehicle_number: "",
+    capacity_weight: 1000,
   });
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
   const [isSubmitLoading, setIsSubmitLoading] = useState(false);
@@ -267,6 +269,7 @@ export default function DispatchPage() {
       shipper_id: shippers.length > 0 ? shippers[0].id : "",
       destination_hub_id: "",
       vehicle_number: "",
+      capacity_weight: 1000,
     });
     setIsCreateModalOpen(true);
   };
@@ -296,6 +299,7 @@ export default function DispatchPage() {
         origin_hub: hubs.find((h) => h.id === originId) || hubs[0],
         destination_hub:
           hubs.find((h) => h.id === createForm.destination_hub_id) || null,
+        capacity_weight: Number(createForm.capacity_weight) || 1000,
         orders: [],
       };
       setShipments([newShip, ...shipments]);
@@ -314,6 +318,7 @@ export default function DispatchPage() {
         origin_hub_id: originId,
         destination_hub_id: createForm.destination_hub_id || undefined,
         vehicle_number: createForm.vehicle_number.toUpperCase(),
+        capacity_weight: Number(createForm.capacity_weight),
       });
       const created = response.data?.data || response.data;
       if (created) {
@@ -452,8 +457,6 @@ export default function DispatchPage() {
     return orders.reduce((sum, o) => sum + Number(o.weight), 0);
   };
 
-  const getMaxWeightLimit = () => 1000; // Giới hạn tải trọng xe là 1000kg
-
   return (
     <div className="space-y-6 animate-fadeIn">
       {/* Demo Warning */}
@@ -544,7 +547,7 @@ export default function DispatchPage() {
         ) : (
           shipments.map((ship) => {
             const currentWeight = getWeightSum(ship.orders);
-            const maxWeight = getMaxWeightLimit();
+            const maxWeight = Number(ship.capacity_weight) || 1000;
             const fillRate = Math.min(
               Math.round((currentWeight / maxWeight) * 100),
               100,
@@ -775,6 +778,26 @@ export default function DispatchPage() {
                       </option>
                     ))}
                 </select>
+              </div>
+
+              {/* Tải trọng xe */}
+              <div>
+                <label className="block text-xs font-bold text-slate-555 uppercase tracking-wider mb-2">
+                  Tải trọng tối đa của xe (kg)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  required
+                  className="block w-full px-3.5 py-2.5 bg-slate-50 border border-slate-250 text-slate-800 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm font-semibold"
+                  value={createForm.capacity_weight}
+                  onChange={(e) =>
+                    setCreateForm({
+                      ...createForm,
+                      capacity_weight: Number(e.target.value),
+                    })
+                  }
+                />
               </div>
 
               <div className="flex justify-end gap-2 pt-4 border-t border-slate-150">
