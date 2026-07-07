@@ -58,6 +58,7 @@ export default function DashboardLayout({
           href: "/dashboard/dispatch",
           icon: Truck,
         },
+        { name: "TMS Dashboard", href: "/dashboard/tms", icon: MapPin },
         {
           name: "Sự cố & Ngoại lệ",
           href: "/dashboard/exceptions",
@@ -79,6 +80,7 @@ export default function DashboardLayout({
       { name: "Hệ thống Bưu cục", href: "/dashboard/hubs", icon: Building2 },
       { name: "Quản lý Nhân sự", href: "/dashboard/users", icon: Users },
       { name: "Quản lý Tài chính", href: "/dashboard/finance", icon: Coins },
+      { name: "TMS Dashboard", href: "/dashboard/tms", icon: MapPin },
       { name: "Quản lý Vật tư", href: "/dashboard/materials", icon: Package },
       { name: "Báo cáo & SLA", href: "/dashboard/statistics", icon: BarChart3 },
       { name: "Cài đặt", href: "/dashboard/settings", icon: Settings },
