@@ -18,6 +18,8 @@ import {
   ScanLine,
   AlertCircle,
   Coins,
+  MapPin,
+  ClipboardList,
 } from "lucide-react";
 import api from "@/lib/axios";
 
@@ -61,6 +63,13 @@ export default function DashboardLayout({
           href: "/dashboard/exceptions",
           icon: AlertCircle,
         },
+        { name: "Vị trí Kệ hàng", href: "/dashboard/locations", icon: MapPin },
+        {
+          name: "Vật tư Đóng gói",
+          href: "/dashboard/materials",
+          icon: Package,
+        },
+        { name: "Kiểm kê Kho", href: "/dashboard/audits", icon: ClipboardList },
         { name: "Cài đặt", href: "/dashboard/settings", icon: Settings },
       ];
     }
@@ -70,6 +79,7 @@ export default function DashboardLayout({
       { name: "Hệ thống Bưu cục", href: "/dashboard/hubs", icon: Building2 },
       { name: "Quản lý Nhân sự", href: "/dashboard/users", icon: Users },
       { name: "Quản lý Tài chính", href: "/dashboard/finance", icon: Coins },
+      { name: "Quản lý Vật tư", href: "/dashboard/materials", icon: Package },
       { name: "Báo cáo & SLA", href: "/dashboard/statistics", icon: BarChart3 },
       { name: "Cài đặt", href: "/dashboard/settings", icon: Settings },
     ];
