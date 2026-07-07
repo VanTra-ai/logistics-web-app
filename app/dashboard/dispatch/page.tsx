@@ -13,6 +13,7 @@ import {
   Layers,
   ArrowRight,
   TrendingUp,
+  Download,
 } from "lucide-react";
 import api from "@/lib/axios";
 
@@ -246,6 +247,28 @@ export default function DispatchPage() {
       setIsDemoMode(true);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleExportManifest = async (shipmentId: string) => {
+    try {
+      setNotification({ type: "success", message: "Đang tải biên bản..." });
+      const res = await api.get(`/exports/orders?shipmentId=${shipmentId}`, {
+        responseType: "blob",
+      });
+      const blobUrl = URL.createObjectURL(res.data);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = `bien-ban-${shipmentId}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(blobUrl);
+    } catch {
+      setNotification({
+        type: "error",
+        message: "Không thể xuất biên bản lúc này.",
+      });
     }
   };
 
@@ -683,6 +706,16 @@ export default function DispatchPage() {
                     >
                       <Layers className="w-3.5 h-3.5 text-slate-500" />
                       Xếp thêm hàng lên xe
+                    </button>
+                  )}
+
+                  {ship.orders.length > 0 && (
+                    <button
+                      onClick={() => handleExportManifest(ship.id)}
+                      className="w-full py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-750 border border-emerald-250 font-bold text-xs rounded-lg transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Download className="w-3.5 h-3.5 text-emerald-600" />
+                      Tải Biên Bản (Excel)
                     </button>
                   )}
                 </div>

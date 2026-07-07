@@ -19,6 +19,9 @@ import {
   Check,
   Layers,
   Printer,
+  Upload,
+  Download,
+  FileSpreadsheet,
 } from "lucide-react";
 import api from "@/lib/axios";
 
@@ -103,6 +106,12 @@ export default function OrdersManagementPage() {
   const [orderStatusFilter, setOrderStatusFilter] = useState("ALL");
   const [orderHubFilter, setOrderHubFilter] = useState("ALL");
 
+  // Import/Export States
+  const [isExcelImportModalOpen, setIsExcelImportModalOpen] = useState(false);
+  const [excelImportFile, setExcelImportFile] = useState<File | null>(null);
+  const [excelImportErrors, setExcelImportErrors] = useState<string[]>([]);
+  const [exportDate, setExportDate] = useState<string>("");
+
   const [shipmentSearch, setShipmentSearch] = useState("");
   const [shipmentStatusFilter, setShipmentStatusFilter] = useState("ALL");
 
@@ -163,6 +172,63 @@ export default function OrdersManagementPage() {
         type: "error",
         message: "Không thể in nhãn vận đơn lúc này.",
       });
+    }
+  };
+
+  const handleExcelImport = async () => {
+    if (!excelImportFile) return;
+    setIsSubmitLoading(true);
+    setExcelImportErrors([]);
+    try {
+      const formData = new FormData();
+      formData.append("file", excelImportFile);
+      const res = await api.post("/orders/import", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      setNotification({ type: "success", message: res.data.message });
+      setIsExcelImportModalOpen(false);
+      setExcelImportFile(null);
+      await loadCoreData();
+    } catch (err: unknown) {
+      const apiError = err as {
+        response?: { data?: { message?: string; errors?: string[] } };
+      };
+      if (apiError.response?.data?.errors) {
+        setExcelImportErrors(apiError.response.data.errors);
+      } else {
+        setNotification({
+          type: "error",
+          message:
+            apiError.response?.data?.message || "Lỗi khi import file Excel",
+        });
+      }
+    } finally {
+      setIsSubmitLoading(false);
+    }
+  };
+
+  const handleExcelExport = async () => {
+    try {
+      setIsLoading(true);
+      const query = exportDate ? `?date=${exportDate}` : "";
+      const res = await api.get(`/exports/orders${query}`, {
+        responseType: "blob",
+      });
+      const blobUrl = URL.createObjectURL(res.data);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = `bao-cao-don-hang-${exportDate || "all"}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(blobUrl);
+    } catch {
+      setNotification({
+        type: "error",
+        message: "Không thể xuất báo cáo lúc này.",
+      });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -1159,6 +1225,18 @@ export default function OrdersManagementPage() {
             </button>
           </div>
 
+          {activeTab === "ORDERS" && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsExcelImportModalOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-semibold text-xs rounded-xl cursor-pointer transition-all"
+              >
+                <Upload className="w-4 h-4" />
+                Nhập Excel
+              </button>
+            </div>
+          )}
+
           <button
             onClick={() => {
               if (activeTab === "ORDERS") openCreateOrderModal();
@@ -1220,6 +1298,27 @@ export default function OrdersManagementPage() {
                 ))}
               </select>
             </div>
+          </div>
+
+          {/* Export / Filters */}
+          <div className="flex flex-col md:flex-row items-center gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm mt-4">
+            <div className="flex items-center gap-2 w-full md:w-auto">
+              <input
+                type="date"
+                value={exportDate}
+                onChange={(e) => setExportDate(e.target.value)}
+                className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+              />
+              <button
+                onClick={handleExcelExport}
+                disabled={isLoading}
+                className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-lg cursor-pointer transition-all disabled:opacity-50"
+              >
+                <Download className="w-4 h-4 text-slate-500" />
+                Xuất Báo cáo
+              </button>
+            </div>
+            <div className="flex-1"></div>
           </div>
 
           {/* Orders Table */}
@@ -2297,6 +2396,95 @@ export default function OrdersManagementPage() {
                 className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs rounded-xl cursor-pointer"
               >
                 Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Excel Import Modal */}
+      {isExcelImportModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-slideUp">
+            <div className="p-5 border-b border-slate-150 bg-slate-50/50 flex items-center justify-between">
+              <h2 className="font-bold text-lg text-slate-800 flex items-center gap-2">
+                <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
+                Nhập Đơn hàng từ Excel
+              </h2>
+              <button
+                onClick={() => {
+                  setIsExcelImportModalOpen(false);
+                  setExcelImportFile(null);
+                  setExcelImportErrors([]);
+                }}
+                className="p-1 hover:bg-slate-200 rounded-full transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5 text-slate-500" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="border-2 border-dashed border-slate-200 rounded-xl p-8 text-center bg-slate-50">
+                <input
+                  type="file"
+                  accept=".xlsx"
+                  id="excel-file"
+                  className="hidden"
+                  onChange={(e) =>
+                    setExcelImportFile(e.target.files?.[0] || null)
+                  }
+                />
+                <label
+                  htmlFor="excel-file"
+                  className="cursor-pointer flex flex-col items-center gap-2"
+                >
+                  <Upload className="w-8 h-8 text-slate-400" />
+                  <span className="text-sm font-semibold text-blue-600">
+                    {excelImportFile
+                      ? excelImportFile.name
+                      : "Chọn file Excel (.xlsx)"}
+                  </span>
+                  <span className="text-xs text-slate-500">
+                    Hỗ trợ các file chuẩn mẫu với định dạng đuôi .xlsx
+                  </span>
+                </label>
+              </div>
+
+              {excelImportErrors.length > 0 && (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-4 max-h-48 overflow-y-auto">
+                  <h3 className="text-red-800 text-sm font-bold flex items-center gap-2 mb-2">
+                    <AlertCircle className="w-4 h-4" />
+                    Lỗi xác thực dữ liệu (File đã bị Rollback)
+                  </h3>
+                  <ul className="text-xs text-red-700 space-y-1 list-disc pl-4">
+                    {excelImportErrors.map((err, idx) => (
+                      <li key={idx}>{err}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+            <div className="p-4 border-t border-slate-150 bg-slate-50 flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setIsExcelImportModalOpen(false);
+                  setExcelImportFile(null);
+                  setExcelImportErrors([]);
+                }}
+                className="px-5 py-2.5 bg-white border border-slate-200 text-slate-700 font-semibold text-sm rounded-xl cursor-pointer"
+              >
+                Hủy
+              </button>
+              <button
+                onClick={handleExcelImport}
+                disabled={!excelImportFile || isSubmitLoading}
+                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-semibold text-sm rounded-xl cursor-pointer flex items-center gap-2"
+              >
+                {isSubmitLoading ? (
+                  <span className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></span>
+                ) : (
+                  <Check className="w-4 h-4" />
+                )}
+                Xác nhận Import
               </button>
             </div>
           </div>
