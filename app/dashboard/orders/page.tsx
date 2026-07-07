@@ -18,6 +18,7 @@ import {
   ClipboardList,
   Check,
   Layers,
+  Printer,
 } from "lucide-react";
 import api from "@/lib/axios";
 
@@ -147,6 +148,23 @@ export default function OrdersManagementPage() {
     capacity_weight: 1000,
   });
   const [isSubmitLoading, setIsSubmitLoading] = useState(false);
+
+  // Print Label Handler
+  const handlePrintLabel = async (orderId: string) => {
+    try {
+      const res = await api.get(`/orders/${orderId}/label`, {
+        responseType: "blob",
+      });
+      const blobUrl = URL.createObjectURL(res.data);
+      window.open(blobUrl, "_blank");
+    } catch (error) {
+      console.error("Lỗi khi tải nhãn in:", error);
+      setNotification({
+        type: "error",
+        message: "Không thể in nhãn vận đơn lúc này.",
+      });
+    }
+  };
 
   // Load core data
   const loadCoreData = async (showSpinner = false) => {
@@ -1414,6 +1432,13 @@ export default function OrdersManagementPage() {
                             >
                               <Eye className="w-4 h-4" />
                             </button>
+                            <button
+                              onClick={() => handlePrintLabel(item.id)}
+                              className="p-1 hover:text-blue-600 cursor-pointer"
+                              title="In nhãn vận đơn"
+                            >
+                              <Printer className="w-4 h-4" />
+                            </button>
                             {(item.current_status === "PENDING" ||
                               item.current_status === "AT_HUB") && (
                               <>
@@ -2259,7 +2284,14 @@ export default function OrdersManagementPage() {
               )}
             </div>
 
-            <div className="p-4 border-t border-slate-150 bg-slate-50/50 flex justify-end">
+            <div className="p-4 border-t border-slate-150 bg-slate-50/50 flex justify-end gap-3">
+              <button
+                onClick={() => handlePrintLabel(selectedOrder.id)}
+                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-xl cursor-pointer flex items-center gap-2"
+              >
+                <Printer className="w-4 h-4" />
+                In nhãn
+              </button>
               <button
                 onClick={() => setIsDetailModalOpen(false)}
                 className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs rounded-xl cursor-pointer"

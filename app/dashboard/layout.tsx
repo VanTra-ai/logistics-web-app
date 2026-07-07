@@ -50,6 +50,7 @@ export default function DashboardLayout({
           icon: LayoutDashboard,
         },
         { name: "Trạm xử lý đơn", href: "/dashboard/station", icon: ScanLine },
+        { name: "Quét Camera", href: "/dashboard/scan", icon: ScanLine },
         {
           name: "Điều phối Chuyến xe",
           href: "/dashboard/dispatch",
