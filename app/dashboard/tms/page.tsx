@@ -2,7 +2,13 @@
 
 import dynamic from "next/dynamic";
 import { useState } from "react";
-import { MapPin as MapPinIcon, Package, Navigation } from "lucide-react";
+import {
+  MapPin as MapPinIcon,
+  Package,
+  Navigation,
+  CheckCircle,
+} from "lucide-react";
+import api from "@/lib/axios";
 
 // Dynamically import Leaflet map component to prevent SSR errors
 const TmsMap = dynamic(() => import("@/components/tms/TmsMap"), {
@@ -25,6 +31,18 @@ interface Order {
   lat: number;
   lng: number;
   delivery_sequence: number | null;
+}
+
+interface VirtualShipment {
+  shipperId?: string;
+  orders: {
+    tracking_number: string;
+    customer_name: string;
+    recipient_address: string;
+    latitude: number;
+    longitude: number;
+    delivery_sequence: number;
+  }[];
 }
 
 interface Hub {
@@ -85,28 +103,60 @@ export default function TMSDashboard() {
     },
   ]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isConfirming, setIsConfirming] = useState(false);
+  const [virtualPlan, setVirtualPlan] = useState<VirtualShipment[]>([]);
 
   const handleAutoDispatch = async () => {
     setIsLoading(true);
     try {
-      // POST /tms/auto-dispatch
-      // await api.post('/tms/auto-dispatch');
+      const res = await api.post("/tms/auto-dispatch");
+      const { virtualShipments } = res.data;
+      if (virtualShipments && virtualShipments.length > 0) {
+        setVirtualPlan(virtualShipments);
 
-      // Mocking successful dispatch
-      setTimeout(() => {
-        setOrders((prev) =>
-          prev.map((o) => ({
-            ...o,
-            status: "DISPATCHED",
-            delivery_sequence:
-              o.delivery_sequence || Math.floor(Math.random() * 5) + 3,
-          })),
-        );
-        setIsLoading(false);
-      }, 1500);
-    } catch (error) {
+        // Update orders list to show the virtual sequence
+        const newOrders: Order[] = [];
+        virtualShipments.forEach((vs: VirtualShipment) => {
+          vs.orders.forEach((vo) => {
+            newOrders.push({
+              id: vo.tracking_number,
+              status: "VIRTUAL",
+              customer: vo.customer_name,
+              address: vo.recipient_address,
+              lat: vo.latitude,
+              lng: vo.longitude,
+              delivery_sequence: vo.delivery_sequence,
+            });
+          });
+        });
+        setOrders(newOrders);
+      } else {
+        alert(res.data.message || "Không có gợi ý điều phối");
+      }
+    } catch (error: unknown) {
       console.error("Auto dispatch failed", error);
+      alert("Lỗi khi điều phối ảo!");
+    } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleConfirmDispatch = async () => {
+    if (virtualPlan.length === 0) return;
+    setIsConfirming(true);
+    try {
+      await api.post("/tms/confirm-dispatch", {
+        virtualShipments: virtualPlan,
+      });
+      alert("Xác nhận điều phối thành công!");
+      setVirtualPlan([]);
+      // fetch real orders again here...
+      setOrders(orders.map((o) => ({ ...o, status: "DISPATCHED" })));
+    } catch (error: unknown) {
+      console.error("Confirm dispatch failed", error);
+      alert("Lỗi khi xác nhận điều phối!");
+    } finally {
+      setIsConfirming(false);
     }
   };
 
@@ -121,18 +171,34 @@ export default function TMSDashboard() {
             Điều phối và theo dõi tuyến đường vận chuyển
           </p>
         </div>
-        <button
-          onClick={handleAutoDispatch}
-          disabled={isLoading}
-          className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium rounded-xl shadow-lg shadow-blue-500/30 hover:shadow-blue-500/50 hover:-translate-y-0.5 transition-all disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none"
-        >
-          {isLoading ? (
-            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-          ) : (
-            <Navigation className="w-5 h-5" />
+        <div className="flex gap-3">
+          {virtualPlan.length > 0 && (
+            <button
+              onClick={handleConfirmDispatch}
+              disabled={isConfirming}
+              className="flex items-center gap-2 px-6 py-3 bg-emerald-600 text-white font-medium rounded-xl shadow-lg shadow-emerald-500/30 hover:shadow-emerald-500/50 hover:-translate-y-0.5 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+            >
+              {isConfirming ? (
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <CheckCircle className="w-5 h-5" />
+              )}
+              <span>Xác nhận Điều phối</span>
+            </button>
           )}
-          <span>Auto Dispatch</span>
-        </button>
+          <button
+            onClick={handleAutoDispatch}
+            disabled={isLoading}
+            className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium rounded-xl shadow-lg shadow-blue-500/30 hover:shadow-blue-500/50 hover:-translate-y-0.5 transition-all disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none"
+          >
+            {isLoading ? (
+              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : (
+              <Navigation className="w-5 h-5" />
+            )}
+            <span>Auto Dispatch (Gợi ý)</span>
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 min-h-0">

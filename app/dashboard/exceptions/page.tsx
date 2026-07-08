@@ -131,8 +131,8 @@ export default function ExceptionsPage() {
 
     const matchesStatus =
       statusFilter === "ALL" ||
-      (statusFilter === "EXCEPTION" && o.current_status === "EXCEPTION") ||
-      (statusFilter === "NORMAL" && o.current_status !== "EXCEPTION");
+      (statusFilter === "FAILED" && o.current_status === "FAILED") ||
+      (statusFilter === "NORMAL" && o.current_status !== "FAILED");
 
     return matchesSearch && matchesStatus;
   });
@@ -148,7 +148,7 @@ export default function ExceptionsPage() {
     setIsReportModalOpen(true);
   };
 
-  // Nộp báo cáo sự cố (PATCH /orders/:id/status)
+  // Nộp báo cáo sự cố (POST /incidents)
   const handleReportSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedOrder) return;
@@ -161,7 +161,6 @@ export default function ExceptionsPage() {
     const incidentUrl =
       formData.incident_image_url.trim() ||
       "https://images.unsplash.com/photo-1595246140625-573b715d11dc?w=400"; // Mock image url
-    const issueText = `[SỰ CỐ - ${formData.issueType}]: ${formData.description}`;
 
     if (isDemoMode) {
       setOrders(
@@ -169,8 +168,8 @@ export default function ExceptionsPage() {
           o.id === selectedOrder.id
             ? {
                 ...o,
-                current_status: "EXCEPTION",
-                note: issueText,
+                current_status: "FAILED",
+                note: `[SỰ CỐ - ${formData.issueType}]: ${formData.description}`,
                 delivery_image_url: incidentUrl,
               }
             : o,
@@ -186,10 +185,11 @@ export default function ExceptionsPage() {
     }
 
     try {
-      await api.patch(`/orders/${selectedOrder.id}/status`, {
-        status: "EXCEPTION",
-        note: issueText,
-        incident_image_url: incidentUrl,
+      await api.post(`/incidents`, {
+        orderId: selectedOrder.id,
+        reason: formData.issueType,
+        description: formData.description,
+        proof_image_url: incidentUrl,
       });
       await fetchOrders();
       setIsReportModalOpen(false);
@@ -248,7 +248,7 @@ export default function ExceptionsPage() {
   };
 
   const getStatusBadge = (status: string) => {
-    if (status === "EXCEPTION") {
+    if (status === "FAILED") {
       return (
         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-red-50 text-red-700 border border-red-200">
           <AlertTriangle className="w-3 h-3" />
@@ -355,7 +355,7 @@ export default function ExceptionsPage() {
           onChange={(e) => setStatusFilter(e.target.value)}
         >
           <option value="ALL">Tất cả kiện hàng tại bưu cục</option>
-          <option value="EXCEPTION">Hàng lỗi sự cố / Tạm giữ</option>
+          <option value="FAILED">Sự cố</option>
           <option value="NORMAL">Hàng bình thường khả dụng</option>
         </select>
       </div>
