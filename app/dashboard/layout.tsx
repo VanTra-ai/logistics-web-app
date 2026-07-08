@@ -123,11 +123,20 @@ export default function DashboardLayout({
     return [
       { name: "Tổng quan", href: "/dashboard", icon: LayoutDashboard },
       { name: "Quản lý Đơn hàng", href: "/dashboard/orders", icon: Package },
+      { name: "Trạm xử lý đơn", href: "/dashboard/station", icon: ScanLine },
+      { name: "Điều phối Chuyến xe", href: "/dashboard/dispatch", icon: Truck },
       { name: "Hệ thống Bưu cục", href: "/dashboard/hubs", icon: Building2 },
       { name: "Quản lý Nhân sự", href: "/dashboard/users", icon: Users },
       { name: "Quản lý Tài chính", href: "/dashboard/finance", icon: Coins },
       { name: "TMS Dashboard", href: "/dashboard/tms", icon: MapPin },
       { name: "Quản lý Vật tư", href: "/dashboard/materials", icon: Package },
+      { name: "Vị trí Kệ hàng", href: "/dashboard/locations", icon: MapPin },
+      {
+        name: "Sự cố & Ngoại lệ",
+        href: "/dashboard/exceptions",
+        icon: AlertCircle,
+      },
+      { name: "Kiểm kê Kho", href: "/dashboard/audits", icon: ClipboardList },
       { name: "Báo cáo & SLA", href: "/dashboard/statistics", icon: BarChart3 },
       { name: "Báo cáo BI", href: "/dashboard/reports", icon: PieChart },
       {
@@ -166,6 +175,34 @@ export default function DashboardLayout({
               console.error("Lỗi parse user từ localStorage:", e);
             }
           }
+
+          // Verify actual role from backend to prevent role spoofing
+          api
+            .get("/users/profile")
+            .then((res) => {
+              const serverUser = res.data?.data || res.data;
+              if (savedUser) {
+                try {
+                  const localUser = JSON.parse(savedUser);
+                  if (localUser.role !== serverUser.role) {
+                    console.warn("Role mismatch detected! Force logout.");
+                    throw new Error("Role mismatch");
+                  }
+                  // Update user state with fresh data
+                  setUser(serverUser);
+                  localStorage.setItem("user", JSON.stringify(serverUser));
+                } catch {
+                  // Ignore
+                }
+              }
+            })
+            .catch(() => {
+              // Token invalid or role spoofed
+              localStorage.removeItem("token");
+              localStorage.removeItem("refresh_token");
+              localStorage.removeItem("user");
+              router.push("/");
+            });
         }
       }
     }, 0);

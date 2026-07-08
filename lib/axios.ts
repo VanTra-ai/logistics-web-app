@@ -20,20 +20,56 @@ api.interceptors.response.use(
     // Nếu request thành công, trả về response nguyên vẹn
     return response;
   },
-  (error) => {
+  async (error) => {
+    const originalRequest = error.config;
+
     if (error.response) {
       const status = error.response.status;
-      // Xử lý khi Token hết hạn (401)
-      if (status === 401) {
-        if (typeof window !== "undefined") {
-          console.warn(`[Axios Interceptor] Lỗi ${status}. Đang đăng xuất...`);
-          // Xóa toàn bộ dữ liệu phiên đăng nhập
-          localStorage.removeItem("token");
-          localStorage.removeItem("refresh_token");
-          localStorage.removeItem("user");
 
-          // Chuyển hướng người dùng về trang đăng nhập
-          window.location.href = "/";
+      // Xử lý khi Token hết hạn (401)
+      if (status === 401 && !originalRequest._retry) {
+        originalRequest._retry = true; // Đánh dấu đã thử lại để tránh lặp vô hạn
+
+        if (typeof window !== "undefined") {
+          const refreshToken = localStorage.getItem("refresh_token");
+
+          if (refreshToken) {
+            try {
+              // Gọi API refresh token
+              const response = await axios.post(
+                `${api.defaults.baseURL}/auth/refresh`,
+                { refresh_token: refreshToken },
+              );
+
+              const { access_token, refresh_token: new_refresh_token } =
+                response.data?.data || response.data;
+
+              // Lưu token mới
+              localStorage.setItem("token", access_token);
+              localStorage.setItem("refresh_token", new_refresh_token);
+
+              // Cập nhật header cho request cũ và gửi lại
+              originalRequest.headers.Authorization = `Bearer ${access_token}`;
+              return api(originalRequest);
+            } catch (refreshError) {
+              console.warn(
+                "[Axios Interceptor] Refresh token thất bại. Đang đăng xuất...",
+              );
+              localStorage.removeItem("token");
+              localStorage.removeItem("refresh_token");
+              localStorage.removeItem("user");
+              window.location.href = "/";
+              return Promise.reject(refreshError);
+            }
+          } else {
+            console.warn(
+              "[Axios Interceptor] Không có refresh token. Đang đăng xuất...",
+            );
+            localStorage.removeItem("token");
+            localStorage.removeItem("refresh_token");
+            localStorage.removeItem("user");
+            window.location.href = "/";
+          }
         }
       }
     }

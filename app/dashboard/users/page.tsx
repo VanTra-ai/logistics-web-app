@@ -191,6 +191,13 @@ export default function UsersManagementPage() {
       setFormError("Mật khẩu phải dài tối thiểu 6 ký tự!");
       return;
     }
+    if (
+      (formData.role === "HUB_COORDINATOR" || formData.role === "SHIPPER") &&
+      !formData.hubId
+    ) {
+      setFormError(`Vui lòng chọn bưu cục cho vai trò ${formData.role === "SHIPPER" ? "Shipper" : "Điều phối viên"}!`);
+      return;
+    }
 
     setIsSubmitLoading(true);
     setFormError("");
@@ -257,6 +264,13 @@ export default function UsersManagementPage() {
     if (!selectedUser) return;
     if (!formData.phone_number.trim() || !formData.fullName.trim()) {
       setFormError("Tên hiển thị và số điện thoại không được để trống!");
+      return;
+    }
+    if (
+      (formData.role === "HUB_COORDINATOR" || formData.role === "SHIPPER") &&
+      !formData.hubId
+    ) {
+      setFormError(`Vui lòng chọn bưu cục cho vai trò ${formData.role === "SHIPPER" ? "Shipper" : "Điều phối viên"}!`);
       return;
     }
 
