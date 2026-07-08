@@ -20,6 +20,7 @@ import {
   Coins,
   MapPin,
   ClipboardList,
+  PieChart,
 } from "lucide-react";
 import api from "@/lib/axios";
 
@@ -83,6 +84,7 @@ export default function DashboardLayout({
       { name: "TMS Dashboard", href: "/dashboard/tms", icon: MapPin },
       { name: "Quản lý Vật tư", href: "/dashboard/materials", icon: Package },
       { name: "Báo cáo & SLA", href: "/dashboard/statistics", icon: BarChart3 },
+      { name: "Báo cáo BI", href: "/dashboard/reports", icon: PieChart },
       {
         name: "Nhật ký Hệ thống",
         href: "/dashboard/audit-logs",
