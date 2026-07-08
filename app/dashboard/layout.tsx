@@ -21,6 +21,7 @@ import {
   MapPin,
   ClipboardList,
   PieChart,
+  AlertTriangle,
 } from "lucide-react";
 import api from "@/lib/axios";
 
@@ -89,6 +90,11 @@ export default function DashboardLayout({
         name: "Nhật ký Hệ thống",
         href: "/dashboard/audit-logs",
         icon: ClipboardList,
+      },
+      {
+        name: "Quản lý Sự cố",
+        href: "/dashboard/incidents",
+        icon: AlertTriangle,
       },
       { name: "Cài đặt", href: "/dashboard/settings", icon: Settings },
     ];
