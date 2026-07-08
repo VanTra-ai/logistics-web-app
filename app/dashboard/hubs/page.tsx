@@ -74,49 +74,15 @@ export default function HubsPage() {
         throw new Error("Dữ liệu bưu cục trả về không đúng định dạng");
       }
     } catch (error) {
-      console.warn(
-        "Không thể tải danh sách bưu cục từ server. Chuyển sang Demo Mode.",
-        error,
-      );
-      // Dữ liệu giả lập (Demo Mode Fallback)
-      setHubs([
-        {
-          id: "hub-1",
-          name: "Bưu cục Cầu Giấy",
-          address: "Số 15 Duy Tân, Dịch Vọng Hậu, Cầu Giấy, Hà Nội",
-          is_active: true,
-          created_at: "2026-06-01T08:00:00Z",
-        },
-        {
-          id: "hub-2",
-          name: "Bưu cục Quận 1",
-          address: "218 Nguyễn Thị Minh Khai, Phường 6, Quận 1, TP. HCM",
-          is_active: true,
-          created_at: "2026-06-05T09:30:00Z",
-        },
-        {
-          id: "hub-3",
-          name: "Bưu cục Hải Phòng",
-          address: "102 Lạch Tray, Ngô Quyền, Hải Phòng",
-          is_active: true,
-          created_at: "2026-06-10T10:15:00Z",
-        },
-        {
-          id: "hub-4",
-          name: "Bưu cục Đà Nẵng",
-          address: "48 Chi Lăng, Hải Châu, Đà Nẵng",
-          is_active: true,
-          created_at: "2026-06-12T14:20:00Z",
-        },
-        {
-          id: "hub-5",
-          name: "Bưu cục Thủ Đức",
-          address: "45 Võ Văn Ngân, Linh Chiểu, Thủ Đức, TP. HCM",
-          is_active: false,
-          created_at: "2026-06-15T11:00:00Z",
-        },
-      ]);
-      setIsDemoMode(true);
+      console.warn("Không thể tải danh sách bưu cục từ server.", error);
+      if (axios.isAxiosError(error) && error.response?.status === 403) {
+        setNotification({
+          type: "error",
+          message: "Bạn không có quyền xem danh sách bưu cục",
+        });
+      }
+      setHubs([]);
+      setIsDemoMode(false);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);

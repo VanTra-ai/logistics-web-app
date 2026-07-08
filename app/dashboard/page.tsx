@@ -15,6 +15,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import api from "@/lib/axios";
+import axios from "axios";
 
 // Định nghĩa kiểu dữ liệu User
 interface LoggedInUser {
@@ -118,18 +119,12 @@ export default function DashboardPage() {
         throw new Error("Dữ liệu thống kê không hợp lệ");
       }
     } catch (error) {
-      console.warn(
-        "Không kết nối được API /orders/statistics. Sử dụng dữ liệu giả lập.",
-        error,
-      );
-      // Fallback sang dữ liệu giả lập (Demo Mode)
-      setStatsData([
-        { status: "PENDING", count: 320 },
-        { status: "DELIVERING", count: 450 },
-        { status: "FINISHED", count: 420 },
-        { status: "CANCELLED", count: 58 },
-      ]);
-      setIsDemoMode(true);
+      console.warn("Không kết nối được API /orders/statistics.", error);
+      if (axios.isAxiosError(error) && error.response?.status === 403) {
+        // Có thể set một lỗi chung hoặc bỏ qua
+      }
+      setStatsData([]);
+      setIsDemoMode(false);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -266,6 +261,28 @@ export default function DashboardPage() {
   if (user?.role === "HUB_COORDINATOR") {
     return (
       <CoordinatorDashboard
+        user={user}
+        isDemoMode={isDemoMode}
+        onRefresh={() => fetchStatistics(true)}
+        isRefreshing={isRefreshing}
+      />
+    );
+  }
+
+  if (user?.role === "CUSTOMER") {
+    return (
+      <CustomerDashboard
+        user={user}
+        isDemoMode={isDemoMode}
+        onRefresh={() => fetchStatistics(true)}
+        isRefreshing={isRefreshing}
+      />
+    );
+  }
+
+  if (user?.role === "SHIPPER") {
+    return (
+      <ShipperDashboard
         user={user}
         isDemoMode={isDemoMode}
         onRefresh={() => fetchStatistics(true)}
@@ -725,28 +742,269 @@ export default function DashboardPage() {
                   45 phút trước
                 </span>
               </div>
-            </div>
-
-            {/* Feed 4 */}
-            <div className="relative">
-              <span className="absolute -left-[22px] top-1.5 p-1 bg-red-500 text-white rounded-full ring-4 ring-white">
-                <AlertTriangle className="w-3 h-3" />
-              </span>
-              <div>
-                <p className="text-sm font-semibold text-slate-800">
-                  Báo lỗi sự cố
-                </p>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Yêu cầu hỗ trợ kỹ thuật tại Bưu cục Hải Phòng: Hỏng máy quét
-                  mã vạch.
-                </p>
-                <span className="text-[10px] text-slate-400 mt-2 block font-medium">
-                  1 giờ trước
+              {/* Feed 4 */}
+              <div className="relative">
+                <span className="absolute -left-[22px] top-1.5 p-1 bg-red-500 text-white rounded-full ring-4 ring-white">
+                  <AlertTriangle className="w-3 h-3" />
                 </span>
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">
+                    Báo lỗi sự cố
+                  </p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Yêu cầu hỗ trợ kỹ thuật tại Bưu cục Hải Phòng: Hỏng máy quét
+                    mã vạch.
+                  </p>
+                  <span className="text-[10px] text-slate-400 mt-2 block font-medium">
+                    1 giờ trước
+                  </span>
+                </div>
               </div>
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// COMPONENT DASHBOARD DÀNH RIÊNG CHO KHÁCH HÀNG (CUSTOMER)
+interface CustomerDashboardProps {
+  user: LoggedInUser | null;
+  isDemoMode: boolean;
+  onRefresh: () => void;
+  isRefreshing: boolean;
+}
+
+function CustomerDashboard({
+  user,
+  onRefresh,
+  isRefreshing,
+}: CustomerDashboardProps) {
+  // Thống kê giả lập dành riêng cho shop của Khách hàng
+  const shopMetrics = {
+    total: 2,
+    delivering: 0,
+    finished: 0,
+    pending: 0,
+  };
+
+  const shopOrders = [
+    {
+      id: "VN2026Y5R5I",
+      receiver: "Nguyễn Văn Khách",
+      address: "Quận 1, TP.HCM",
+      weight: "2.5 kg",
+      cod: "150.000 đ",
+      status: "CANCELLED",
+    },
+    {
+      id: "VN2026F3A21",
+      receiver: "Lê Văn Tiến",
+      address: "Lê Lợi, Hải Phòng",
+      weight: "2.5 kg",
+      cod: "450.000 đ",
+      status: "PENDING",
+    },
+  ];
+
+  return (
+    <div className="space-y-6 animate-fadeIn">
+      {/* Banner chào mừng */}
+      <div className="relative overflow-hidden bg-gradient-to-r from-blue-900 to-slate-900 rounded-2xl p-6 sm:p-8 border border-slate-800 shadow-lg">
+        <div className="absolute top-0 right-0 w-80 h-80 bg-blue-500/10 rounded-full blur-[100px] pointer-events-none" />
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold text-white">
+              Chào mừng, {user?.full_name || "Chủ shop"}!
+            </h1>
+            <p className="text-slate-400 mt-1.5 text-xs sm:text-sm">
+              Hệ thống vận hành WMS Pro sẵn sàng hỗ trợ bạn theo dõi và tạo đơn
+              hàng.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={onRefresh}
+              disabled={isRefreshing}
+              className="flex items-center gap-2 px-3.5 py-2 bg-slate-850 hover:bg-slate-800 text-slate-200 border border-slate-700 rounded-xl text-xs transition-colors cursor-pointer disabled:opacity-50 font-semibold"
+            >
+              <RefreshCw
+                className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`}
+              />
+              Làm mới
+            </button>
+            <button
+              onClick={() => (window.location.href = "/dashboard/orders")}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-xs shadow-md transition-all active:scale-[0.98] cursor-pointer"
+            >
+              Tạo đơn mới
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Grid chỉ số đơn hàng của Shop */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
+          <div className="p-3 bg-slate-50 text-slate-600 rounded-xl">
+            <Package className="w-6 h-6" />
+          </div>
+          <div>
+            <span className="text-xs text-slate-500 block font-medium">
+              Tổng đơn gửi
+            </span>
+            <span className="text-xl font-bold text-slate-800">
+              {shopMetrics.total} đơn
+            </span>
+          </div>
+        </div>
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
+          <div className="p-3 bg-blue-50 text-blue-600 rounded-xl">
+            <Truck className="w-6 h-6" />
+          </div>
+          <div>
+            <span className="text-xs text-slate-500 block font-medium">
+              Đang giao hàng
+            </span>
+            <span className="text-xl font-bold text-slate-800">
+              {shopMetrics.delivering} đơn
+            </span>
+          </div>
+        </div>
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
+          <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
+            <CheckCircle2 className="w-6 h-6" />
+          </div>
+          <div>
+            <span className="text-xs text-slate-500 block font-medium">
+              Giao thành công
+            </span>
+            <span className="text-xl font-bold text-slate-800">
+              {shopMetrics.finished} đơn
+            </span>
+          </div>
+        </div>
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
+          <div className="p-3 bg-amber-50 text-amber-600 rounded-xl">
+            <Clock className="w-6 h-6" />
+          </div>
+          <div>
+            <span className="text-xs text-slate-500 block font-medium">
+              Chờ đi lấy hàng
+            </span>
+            <span className="text-xl font-bold text-slate-850">
+              {shopMetrics.pending} đơn
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Đơn hàng gần đây */}
+      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+        <h2 className="text-sm font-bold text-slate-800 flex items-center gap-2 border-b border-slate-100 pb-3">
+          <Package className="w-4 h-4 text-blue-500" />
+          Theo dõi đơn hàng gần đây của bạn
+        </h2>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr className="border-b border-slate-100 bg-slate-50/50 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                <th className="px-4 py-3">Mã đơn</th>
+                <th className="px-4 py-3">Người nhận</th>
+                <th className="px-4 py-3">Địa chỉ giao</th>
+                <th className="px-4 py-3">Khối lượng</th>
+                <th className="px-4 py-3">Thu hộ COD</th>
+                <th className="px-4 py-3">Trạng thái</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {shopOrders.map((ord) => (
+                <tr key={ord.id} className="hover:bg-slate-50/40">
+                  <td className="px-4 py-3 font-mono font-bold text-slate-900">
+                    {ord.id}
+                  </td>
+                  <td className="px-4 py-3 font-semibold text-slate-800">
+                    {ord.receiver}
+                  </td>
+                  <td className="px-4 py-3 text-slate-550 max-w-xs truncate">
+                    {ord.address}
+                  </td>
+                  <td className="px-4 py-3 text-slate-600">{ord.weight}</td>
+                  <td className="px-4 py-3 text-blue-600 font-bold">
+                    {ord.cod}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        ord.status === "PENDING"
+                          ? "bg-amber-50 text-amber-700 border border-amber-100"
+                          : "bg-red-50 text-red-700 border border-red-100"
+                      }`}
+                    >
+                      {ord.status === "PENDING" ? "Chờ xử lý" : "Đã hủy"}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// COMPONENT DASHBOARD DÀNH RIÊNG CHO TÀI XẾ (SHIPPER)
+interface ShipperDashboardProps {
+  user: LoggedInUser | null;
+  isDemoMode: boolean;
+  onRefresh: () => void;
+  isRefreshing: boolean;
+}
+
+function ShipperDashboard({
+  user,
+  onRefresh,
+  isRefreshing,
+}: ShipperDashboardProps) {
+  return (
+    <div className="space-y-6 animate-fadeIn">
+      <div className="relative overflow-hidden bg-gradient-to-r from-slate-900 to-indigo-950 rounded-2xl p-6 border border-slate-800 shadow-lg">
+        <div className="absolute top-0 right-0 w-80 h-80 bg-indigo-500/10 rounded-full blur-[100px] pointer-events-none" />
+        <div className="relative z-10 flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-bold text-white">
+              Tài xế: {user?.full_name}
+            </h1>
+            <p className="text-slate-400 mt-1 text-xs">
+              Chúc bạn vạn dặm bình an! Vui lòng mở App Mobile để nhận chuyến xe
+              tự động.
+            </p>
+          </div>
+          <button
+            onClick={onRefresh}
+            disabled={isRefreshing}
+            className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs cursor-pointer disabled:opacity-50"
+          >
+            <RefreshCw
+              className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin" : ""}`}
+            />
+            Làm mới
+          </button>
+        </div>
+      </div>
+
+      <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm text-center space-y-3">
+        <Truck className="w-12 h-12 text-slate-400 mx-auto" />
+        <h3 className="text-sm font-bold text-slate-750">
+          Vui lòng sử dụng Ứng dụng di động
+        </h3>
+        <p className="text-xs text-slate-500 max-w-sm mx-auto">
+          Phần dành cho tài xế shipper được thiết kế để thao tác chủ yếu trên
+          ứng dụng Flutter Mobile nhằm tối ưu hóa chức năng định vị và dẫn đường
+          Google Maps.
+        </p>
       </div>
     </div>
   );
@@ -954,7 +1212,10 @@ function CoordinatorDashboard({
                     </span>
                   </div>
                   <div className="text-slate-500 font-medium">
-                    Từ: <span className="text-slate-800 font-bold">{ship.origin}</span>
+                    Từ:{" "}
+                    <span className="text-slate-800 font-bold">
+                      {ship.origin}
+                    </span>
                   </div>
                   <div className="text-[10px] text-slate-400">
                     Tài xế: {ship.driver}
@@ -1004,11 +1265,14 @@ function CoordinatorDashboard({
                     <span className="text-slate-400 font-medium mr-1.5">
                       Xuất phát:
                     </span>
-                    <span className="font-bold text-slate-800">{ship.time}</span>
+                    <span className="font-bold text-slate-800">
+                      {ship.time}
+                    </span>
                   </div>
                 </div>
                 <div className="text-slate-500 font-medium">
-                  Đến: <span className="text-slate-800 font-bold">{ship.dest}</span>
+                  Đến:{" "}
+                  <span className="text-slate-800 font-bold">{ship.dest}</span>
                 </div>
 
                 {/* Tỉ lệ lấp đầy xe */}

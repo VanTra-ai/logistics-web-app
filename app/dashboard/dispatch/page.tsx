@@ -16,6 +16,7 @@ import {
   Download,
 } from "lucide-react";
 import api from "@/lib/axios";
+import axios from "axios";
 
 interface Hub {
   id: string;
@@ -146,105 +147,18 @@ export default function DispatchPage() {
 
       setIsDemoMode(false);
     } catch (err) {
-      console.warn("Lỗi kết nối API backend. Chuyển sang Demo Mode.", err);
-      // Demo Mode fallbacks
-      setHubs([
-        { id: "hub-1", name: "Bưu cục Cầu Giấy" },
-        { id: "hub-2", name: "Bưu cục Quận 1" },
-        { id: "hub-3", name: "Bưu cục Hải Phòng" },
-        { id: "hub-4", name: "Bưu cục Đà Nẵng" },
-      ]);
-
-      const mockShippers = [
-        {
-          id: "shipper-1",
-          full_name: "Nguyễn Hoàng Nam",
-          phone_number: "0912345678",
-        },
-        {
-          id: "shipper-2",
-          full_name: "Vũ Văn Bách",
-          phone_number: "0945678901",
-        },
-        {
-          id: "shipper-3",
-          full_name: "Trần Văn Luận",
-          phone_number: "0934567890",
-        },
-      ];
-      setShippers(mockShippers);
-
-      setShipments([
-        {
-          id: "ship-101",
-          vehicle_number: "29C-888.88",
-          status: "PENDING",
-          created_at: new Date().toISOString(),
-          shipper: mockShippers[0],
-          origin_hub: { id: "hub-1", name: "Bưu cục Cầu Giấy" },
-          destination_hub: { id: "hub-3", name: "Bưu cục Hải Phòng" },
-          orders: [
-            {
-              id: "ord-1",
-              tracking_number: "ORD-9481",
-              weight: 120,
-              receiver_address: "Lê Lợi, Hải Phòng",
-              current_status: "AT_HUB",
-            },
-            {
-              id: "ord-2",
-              tracking_number: "ORD-8512",
-              weight: 230,
-              receiver_address: "Lạch Tray, Hải Phòng",
-              current_status: "AT_HUB",
-            },
-          ],
-        },
-        {
-          id: "ship-102",
-          vehicle_number: "30E-999.99",
-          status: "IN_TRANSIT",
-          created_at: new Date().toISOString(),
-          shipper: mockShippers[1],
-          origin_hub: { id: "hub-1", name: "Bưu cục Cầu Giấy" },
-          destination_hub: { id: "hub-4", name: "Bưu cục Đà Nẵng" },
-          orders: [
-            {
-              id: "ord-3",
-              tracking_number: "ORD-4819",
-              weight: 450,
-              receiver_address: "Hải Châu, Đà Nẵng",
-              current_status: "DELIVERING",
-            },
-          ],
-        },
-      ]);
-
-      setAvailableOrders([
-        {
-          id: "ord-4",
-          tracking_number: "ORD-1234",
-          weight: 80,
-          receiver_address: "Hồng Bàng, Hải Phòng",
-          current_status: "AT_HUB",
-        },
-        {
-          id: "ord-5",
-          tracking_number: "ORD-5678",
-          weight: 150,
-          receiver_address: "Ngô Quyền, Hải Phòng",
-          current_status: "AT_HUB",
-        },
-        {
-          id: "ord-6",
-          tracking_number: "ORD-9012",
-          weight: 340,
-          receiver_address: "Đống Đa, Đà Nẵng",
-          current_status: "AT_HUB",
-        },
-      ]);
-
-      setIsDemoMode(true);
+      console.warn("Lỗi kết nối API backend.", err);
+      if (axios.isAxiosError(err) && err.response?.status === 403) {
+        setNotification({
+          type: "error",
+          message: "Bạn không có quyền truy cập thông tin điều phối",
+        });
+      }
+      setIsDemoMode(false);
+      setHubs([]);
+      setShippers([]);
+      setShipments([]);
+      setAvailableOrders([]);
     } finally {
       setIsLoading(false);
     }
@@ -914,6 +828,60 @@ export default function DispatchPage() {
                 )}
               </div>
 
+              {selectedShipment && (
+                <div className="pt-2">
+                  {(() => {
+                    const capacityWeight =
+                      selectedShipment.capacity_weight || 99999;
+                    const currentWeight = getWeightSum(selectedShipment.orders);
+                    const additionalWeight = getWeightSum(
+                      availableOrders.filter((o) =>
+                        selectedOrderIds.includes(o.id),
+                      ),
+                    );
+                    const totalWeight = currentWeight + additionalWeight;
+                    const isOverloaded = totalWeight > capacityWeight;
+
+                    return (
+                      <div
+                        className={`p-3 rounded-xl border text-xs font-semibold ${isOverloaded ? "bg-red-50 text-red-700 border-red-200" : "bg-slate-50 text-slate-700 border-slate-200"}`}
+                      >
+                        <div className="flex justify-between items-center mb-1">
+                          <span>Tải trọng sau khi xếp:</span>
+                          <span
+                            className={
+                              isOverloaded
+                                ? "text-red-700 font-bold"
+                                : "text-blue-700 font-bold"
+                            }
+                          >
+                            {totalWeight} kg /{" "}
+                            {capacityWeight === 99999
+                              ? "Không giới hạn"
+                              : `${capacityWeight} kg`}
+                          </span>
+                        </div>
+                        {/* Progress Bar */}
+                        <div className="w-full bg-slate-200 rounded-full h-1.5 mt-2 overflow-hidden">
+                          <div
+                            className={`h-1.5 rounded-full ${isOverloaded ? "bg-red-600" : "bg-blue-600"}`}
+                            style={{
+                              width: `${Math.min((totalWeight / capacityWeight) * 100, 100)}%`,
+                            }}
+                          ></div>
+                        </div>
+                        {isOverloaded && (
+                          <div className="mt-2 text-red-600 font-bold flex items-center gap-1">
+                            <AlertCircle className="w-3.5 h-3.5" />
+                            Đã vượt quá tải trọng cho phép của xe!
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
               <div className="flex justify-end gap-2 pt-4 border-t border-slate-150">
                 <button
                   type="button"
@@ -924,7 +892,18 @@ export default function DispatchPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={isSubmitLoading || availableOrders.length === 0}
+                  disabled={
+                    isSubmitLoading ||
+                    availableOrders.length === 0 ||
+                    (selectedShipment &&
+                      getWeightSum(selectedShipment.orders) +
+                        getWeightSum(
+                          availableOrders.filter((o) =>
+                            selectedOrderIds.includes(o.id),
+                          ),
+                        ) >
+                        (selectedShipment.capacity_weight || 99999))
+                  }
                   className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm rounded-xl transition-all shadow-md active:scale-[0.98] cursor-pointer disabled:opacity-50"
                 >
                   {isSubmitLoading ? "Đang xếp..." : "Xác nhận xếp hàng"}

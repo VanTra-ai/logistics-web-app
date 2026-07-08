@@ -104,72 +104,15 @@ export default function UsersManagementPage() {
         throw new Error("Dữ liệu nhân viên trả về không đúng định dạng");
       }
     } catch (error) {
-      console.warn(
-        "Không tải được danh sách nhân viên từ backend. Chuyển sang Demo Mode.",
-        error,
-      );
-      setUsers([
-        {
-          id: "user-1",
-          email: "admin@logistics.com",
-          phone_number: "0987654321",
-          full_name: "Phạm Văn Trà",
-          role: "ADMIN",
-          status: "ACTIVE",
-          created_at: "2026-06-01T08:00:00Z",
-          hub: { id: "hub-1", name: "Bưu cục Cầu Giấy" },
-        },
-        {
-          id: "user-2",
-          email: "nam.shipper@logistics.com",
-          phone_number: "0912345678",
-          full_name: "Nguyễn Hoàng Nam",
-          role: "SHIPPER",
-          status: "ACTIVE",
-          created_at: "2026-06-05T09:30:00Z",
-          hub: { id: "hub-1", name: "Bưu cục Cầu Giấy" },
-        },
-        {
-          id: "user-3",
-          email: "lan.coordinator@logistics.com",
-          phone_number: "0934567890",
-          full_name: "Trần Thị Lan",
-          role: "HUB_COORDINATOR",
-          status: "ACTIVE",
-          created_at: "2026-06-10T10:15:00Z",
-          hub: { id: "hub-2", name: "Bưu cục Quận 1" },
-        },
-        {
-          id: "user-4",
-          email: "bach.shipper@logistics.com",
-          phone_number: "0945678901",
-          full_name: "Vũ Văn Bách",
-          role: "SHIPPER",
-          status: "ACTIVE",
-          created_at: "2026-06-12T14:20:00Z",
-          hub: { id: "hub-3", name: "Bưu cục Hải Phòng" },
-        },
-        {
-          id: "user-5",
-          email: "customer.vn@gmail.com",
-          phone_number: "0956789012",
-          full_name: "Lê Văn Khách",
-          role: "CUSTOMER",
-          status: "ACTIVE",
-          created_at: "2026-06-15T11:00:00Z",
-        },
-        {
-          id: "user-6",
-          email: "nghi.shipper@logistics.com",
-          phone_number: "0967890123",
-          full_name: "Nguyễn Văn Nghỉ",
-          role: "SHIPPER",
-          status: "INACTIVE",
-          created_at: "2026-06-18T16:00:00Z",
-          hub: { id: "hub-4", name: "Bưu cục Đà Nẵng" },
-        },
-      ]);
-      setIsDemoMode(true);
+      console.warn("Không tải được danh sách nhân viên từ backend.", error);
+      if (axios.isAxiosError(error) && error.response?.status === 403) {
+        setNotification({
+          type: "error",
+          message: "Bạn không có quyền xem danh sách nhân viên",
+        });
+      }
+      setUsers([]);
+      setIsDemoMode(false);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);

@@ -1,5 +1,7 @@
 "use client";
 
+import { useState, useEffect } from "react";
+
 import {
   MapContainer,
   TileLayer,
@@ -88,9 +90,19 @@ export default function TmsMap({ orders, hubs, shippers }: TmsMapProps) {
     (o) => [o.lat, o.lng] as [number, number],
   );
 
+  const [mapId, setMapId] = useState<string>("");
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMapId(`map-${Date.now()}-${Math.random()}`);
+  }, []);
+
+  if (!mapId) return null;
+
   return (
     <div className="w-full h-full min-h-[500px] z-0 rounded-xl overflow-hidden">
       <MapContainer
+        key={mapId}
         center={defaultCenter}
         zoom={13}
         style={{ height: "100%", width: "100%", zIndex: 0 }}

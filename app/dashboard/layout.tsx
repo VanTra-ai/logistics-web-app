@@ -14,6 +14,7 @@ import {
   Bell,
   Menu,
   X,
+  User,
   Users,
   ScanLine,
   AlertCircle,
@@ -56,10 +57,15 @@ export default function DashboardLayout({
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifDropdown, setShowNotifDropdown] = useState(false);
   const [toastNotif, setToastNotif] = useState<string | null>(null);
+  const [showProfileDropdown, setShowProfileDropdown] = useState(false);
 
   const getSidebarLinks = () => {
     if (!user) return [];
-    if (user.role === "HUB_COORDINATOR") {
+
+    const role = user.role?.toUpperCase() || "";
+
+    // 1. HUB_COORDINATOR (Điều phối viên trạm/bưu cục)
+    if (role === "HUB_COORDINATOR") {
       return [
         {
           name: "Tổng quan Bưu cục",
@@ -67,7 +73,6 @@ export default function DashboardLayout({
           icon: LayoutDashboard,
         },
         { name: "Trạm xử lý đơn", href: "/dashboard/station", icon: ScanLine },
-        { name: "Quét Camera", href: "/dashboard/scan", icon: ScanLine },
         {
           name: "Điều phối Chuyến xe",
           href: "/dashboard/dispatch",
@@ -89,6 +94,32 @@ export default function DashboardLayout({
         { name: "Cài đặt", href: "/dashboard/settings", icon: Settings },
       ];
     }
+
+    // 2. SHIPPER (Tài xế giao hàng)
+    if (role === "SHIPPER") {
+      return [
+        { name: "Tổng quan", href: "/dashboard", icon: LayoutDashboard },
+        { name: "Đơn hàng của tôi", href: "/dashboard/orders", icon: Package },
+        { name: "Ví tài xế", href: "/dashboard/finance/wallets", icon: Wallet },
+        { name: "Cài đặt", href: "/dashboard/settings", icon: Settings },
+      ];
+    }
+
+    // 3. CUSTOMER (Chủ shop / Khách hàng)
+    if (role === "CUSTOMER") {
+      return [
+        { name: "Bảng điều khiển", href: "/dashboard", icon: LayoutDashboard },
+        { name: "Quản lý Đơn hàng", href: "/dashboard/orders", icon: Package },
+        {
+          name: "Thống kê Đối soát",
+          href: "/dashboard/statistics",
+          icon: BarChart3,
+        },
+        { name: "Cài đặt", href: "/dashboard/settings", icon: Settings },
+      ];
+    }
+
+    // 4. ADMIN (Quản trị viên) và các role chưa xác định (mặc định Admin full quyền)
     return [
       { name: "Tổng quan", href: "/dashboard", icon: LayoutDashboard },
       { name: "Quản lý Đơn hàng", href: "/dashboard/orders", icon: Package },
@@ -109,11 +140,7 @@ export default function DashboardLayout({
         href: "/dashboard/incidents",
         icon: AlertTriangle,
       },
-      {
-        name: "Ví tài xế",
-        href: "/dashboard/finance/wallets",
-        icon: Wallet,
-      },
+      { name: "Ví tài xế", href: "/dashboard/finance/wallets", icon: Wallet },
       { name: "Cài đặt", href: "/dashboard/settings", icon: Settings },
     ];
   };
@@ -148,8 +175,15 @@ export default function DashboardLayout({
   useEffect(() => {
     if (!user) return;
 
+    const token = localStorage.getItem("token");
     const socket = io(
-      process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000",
+      process.env.NEXT_PUBLIC_API_URL || "http://localhost:3333",
+      {
+        auth: {
+          token: token,
+        },
+        transports: ["websocket"],
+      },
     );
 
     socket.on("new_notification", (data: NotificationItem) => {
@@ -277,7 +311,7 @@ export default function DashboardLayout({
       {/* 2. Main Content (Nội dung chính bên phải) */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Header trên cùng */}
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 sm:px-6 z-10 shadow-sm">
+        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 sm:px-6 z-[100] shadow-sm relative">
           <div className="flex items-center gap-4">
             {/* Nút mở sidebar trên Mobile */}
             <button
@@ -339,18 +373,64 @@ export default function DashboardLayout({
 
             <div className="h-8 w-px bg-slate-200 mx-2"></div>
 
-            <div className="flex items-center gap-3 cursor-pointer">
-              <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-sm select-none">
-                {getInitials(user?.full_name || "")}
+            <div className="relative">
+              <div
+                className="flex items-center gap-3 cursor-pointer hover:bg-slate-50 p-1.5 pr-3 rounded-full transition-colors"
+                onClick={() => setShowProfileDropdown(!showProfileDropdown)}
+              >
+                <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-sm select-none shadow-sm">
+                  {getInitials(user?.full_name || "")}
+                </div>
+                <div className="hidden md:block">
+                  <p className="text-sm font-semibold text-slate-700 leading-tight">
+                    {user?.full_name || "Thành viên"}
+                  </p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {getRoleLabel(user?.role || "")}
+                  </p>
+                </div>
               </div>
-              <div className="hidden md:block">
-                <p className="text-sm font-semibold text-slate-700 leading-tight">
-                  {user?.full_name || "Thành viên"}
-                </p>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  {getRoleLabel(user?.role || "")}
-                </p>
-              </div>
+
+              {/* Profile Dropdown */}
+              {showProfileDropdown && (
+                <div className="absolute top-full mt-2 right-0 w-56 bg-white border border-slate-200 rounded-xl shadow-xl py-2 z-50 animate-fadeIn origin-top-right">
+                  <div className="px-4 py-3 border-b border-slate-100 md:hidden">
+                    <p className="text-sm font-semibold text-slate-700 truncate">
+                      {user?.full_name || "Thành viên"}
+                    </p>
+                    <p className="text-xs text-slate-500 mt-0.5 truncate">
+                      {user?.email || ""}
+                    </p>
+                  </div>
+
+                  <Link
+                    href="/dashboard/profile"
+                    className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 text-slate-700 transition-colors"
+                    onClick={() => setShowProfileDropdown(false)}
+                  >
+                    <User className="w-4 h-4 text-slate-400" />
+                    <span className="text-sm font-medium">Hồ sơ cá nhân</span>
+                  </Link>
+                  <Link
+                    href="/dashboard/settings"
+                    className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 text-slate-700 transition-colors"
+                    onClick={() => setShowProfileDropdown(false)}
+                  >
+                    <Settings className="w-4 h-4 text-slate-400" />
+                    <span className="text-sm font-medium">
+                      Cài đặt hệ thống
+                    </span>
+                  </Link>
+                  <div className="h-px bg-slate-100 my-1"></div>
+                  <button
+                    onClick={handleLogout}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-red-50 text-red-600 transition-colors text-left cursor-pointer"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    <span className="text-sm font-medium">Đăng xuất</span>
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </header>

@@ -24,6 +24,7 @@ import {
   FileSpreadsheet,
 } from "lucide-react";
 import api from "@/lib/axios";
+import axios from "axios";
 import BulkUploadModal from "@/components/BulkUploadModal";
 
 interface Hub {
@@ -93,6 +94,11 @@ export default function OrdersManagementPage() {
   const [shipments, setShipments] = useState<Shipment[]>([]);
   const [hubs, setHubs] = useState<Hub[]>([]);
   const [shippers, setShippers] = useState<Shipper[]>([]);
+  const [tariff, setTariff] = useState<{
+    base_rate: number;
+    step_rate: number;
+    cod_fee_percent: number;
+  } | null>(null);
 
   // Loading & Modes
   const [isLoading, setIsLoading] = useState(true);
@@ -287,135 +293,29 @@ export default function OrdersManagementPage() {
         // Fallback to general get if specific hub-shipments endpoint fails
         setShipments([]);
       }
+      // 5. Fetch Tariff
+      try {
+        const tariffRes = await api.get("/finance/tariff");
+        const tariffData = tariffRes.data?.data || tariffRes.data;
+        if (tariffData) setTariff(tariffData);
+      } catch {
+        console.warn("Could not load tariff for estimate.");
+      }
 
       setIsDemoMode(false);
     } catch (err) {
-      console.warn("Lỗi kết nối API backend. Chuyển sang Demo Mode.", err);
-      setIsDemoMode(true);
-
-      // Fallbacks
-      const mockHubs = [
-        { id: "hub-1", name: "Bưu cục Cầu Giấy" },
-        { id: "hub-2", name: "Bưu cục Quận 1" },
-        { id: "hub-3", name: "Bưu cục Hải Phòng" },
-        { id: "hub-4", name: "Bưu cục Đà Nẵng" },
-      ];
-      setHubs(mockHubs);
-
-      const mockShippers = [
-        {
-          id: "shipper-1",
-          full_name: "Nguyễn Hoàng Nam",
-          phone_number: "0912345678",
-        },
-        {
-          id: "shipper-2",
-          full_name: "Vũ Văn Bách",
-          phone_number: "0945678901",
-        },
-        {
-          id: "shipper-3",
-          full_name: "Trần Văn Luận",
-          phone_number: "0934567890",
-        },
-      ];
-      setShippers(mockShippers);
-
-      const mockOrders: Order[] = [
-        {
-          id: "ord-1",
-          tracking_number: "VN2026F3A21",
-          sender_name: "Nguyễn Thị Hoa",
-          sender_phone: "0911111111",
-          sender_address: "Hoàn Kiếm, Hà Nội",
-          receiver_name: "Lê Văn Tiến",
-          receiver_phone: "0988888888",
-          receiver_address: "Lê Lợi, Hải Phòng",
-          weight: 2.5,
-          cod_amount: 450000,
-          current_status: "PENDING",
-          created_at: "2026-07-01T08:00:00Z",
-          pickup_hub: mockHubs[0],
-          cod_status: "PENDING",
-          shipment: null,
-        },
-        {
-          id: "ord-2",
-          tracking_number: "VN2026A4B92",
-          sender_name: "Trần Văn Hùng",
-          sender_phone: "0922222222",
-          sender_address: "Cầu Giấy, Hà Nội",
-          receiver_name: "Hoàng Văn Nam",
-          receiver_phone: "0977777777",
-          receiver_address: "Lạch Tray, Hải Phòng",
-          weight: 5.0,
-          cod_amount: 1500000,
-          current_status: "AT_HUB",
-          created_at: "2026-07-02T09:30:00Z",
-          pickup_hub: mockHubs[0],
-          cod_status: "PENDING",
-          shipment: null,
-        },
-        {
-          id: "ord-3",
-          tracking_number: "VN2026D7C81",
-          sender_name: "Phạm Minh Đức",
-          sender_phone: "0933333333",
-          sender_address: "Hai Bà Trưng, Hà Nội",
-          receiver_name: "Nguyễn Tuấn Anh",
-          receiver_phone: "0966666666",
-          receiver_address: "Ngô Quyền, Hải Phòng",
-          weight: 0.8,
-          cod_amount: 0,
-          current_status: "EXCEPTION",
-          created_at: "2026-07-03T10:15:00Z",
-          pickup_hub: mockHubs[0],
-          cod_status: "PENDING",
-          note: "Hàng bị móp méo rách tem mác nhẹ",
-          shipment: null,
-        },
-        {
-          id: "ord-4",
-          tracking_number: "VN2026K9D12",
-          sender_name: "Đỗ Văn Toàn",
-          sender_phone: "0944444444",
-          sender_address: "Thanh Xuân, Hà Nội",
-          receiver_name: "Trịnh Quang Vinh",
-          receiver_phone: "0955555555",
-          receiver_address: "Quận 1, TP. HCM",
-          weight: 1.2,
-          cod_amount: 600000,
-          current_status: "FINISHED",
-          created_at: "2026-07-04T11:00:00Z",
-          pickup_hub: mockHubs[0],
-          cod_status: "REMITTED",
-          shipment: { id: "ship-101", vehicle_number: "29C-888.88" },
-        },
-      ];
-      setOrders(mockOrders);
-
-      setShipments([
-        {
-          id: "ship-101",
-          vehicle_number: "29C-888.88",
-          status: "PENDING",
-          created_at: new Date().toISOString(),
-          shipper: mockShippers[0],
-          origin_hub: mockHubs[0],
-          destination_hub: mockHubs[2],
-          orders: [mockOrders[3]],
-        },
-        {
-          id: "ship-102",
-          vehicle_number: "30E-999.99",
-          status: "IN_TRANSIT",
-          created_at: new Date().toISOString(),
-          shipper: mockShippers[1],
-          origin_hub: mockHubs[0],
-          destination_hub: mockHubs[3],
-          orders: [],
-        },
-      ]);
+      console.warn("Lỗi kết nối API backend.", err);
+      if (axios.isAxiosError(err) && err.response?.status === 403) {
+        setNotification({
+          type: "error",
+          message: "Bạn không có quyền xem thông tin này",
+        });
+      }
+      setIsDemoMode(false);
+      setHubs([]);
+      setShippers([]);
+      setOrders([]);
+      setShipments([]);
     } finally {
       setIsLoading(false);
     }
@@ -1204,51 +1104,46 @@ export default function OrdersManagementPage() {
 
         {/* Tab selector and Action */}
         <div className="flex items-center gap-3 self-end md:self-center">
-          <div className="flex bg-slate-100 p-1.5 rounded-xl border border-slate-200 text-xs">
-            <button
-              onClick={() => setActiveTab("ORDERS")}
-              className={`px-4 py-2 font-bold rounded-lg transition-all cursor-pointer ${
-                activeTab === "ORDERS"
-                  ? "bg-white text-blue-700 shadow-sm"
-                  : "text-slate-500 hover:text-slate-800"
-              }`}
-            >
-              Danh sách Đơn hàng
-            </button>
-            <button
-              onClick={() => setActiveTab("SHIPMENTS")}
-              className={`px-4 py-2 font-bold rounded-lg transition-all cursor-pointer ${
-                activeTab === "SHIPMENTS"
-                  ? "bg-white text-blue-700 shadow-sm"
-                  : "text-slate-500 hover:text-slate-800"
-              }`}
-            >
-              Gom nhóm / Chuyến xe
-            </button>
-          </div>
-
-          {activeTab === "ORDERS" && (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setIsExcelImportModalOpen(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-semibold text-xs rounded-xl cursor-pointer transition-all"
-              >
-                <Upload className="w-4 h-4" />
-                Nhập Excel
-              </button>
-            </div>
-          )}
+          {currentUser &&
+            currentUser.role !== "CUSTOMER" &&
+            currentUser.role !== "SHIPPER" && (
+              <div className="flex bg-slate-100 p-1.5 rounded-xl border border-slate-200 text-xs">
+                <button
+                  onClick={() => setActiveTab("ORDERS")}
+                  className={`px-4 py-2 font-bold rounded-lg transition-all cursor-pointer ${
+                    activeTab === "ORDERS"
+                      ? "bg-white text-blue-700 shadow-sm"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  Danh sách Đơn hàng
+                </button>
+                <button
+                  onClick={() => setActiveTab("SHIPMENTS")}
+                  className={`px-4 py-2 font-bold rounded-lg transition-all cursor-pointer ${
+                    activeTab === "SHIPMENTS"
+                      ? "bg-white text-blue-700 shadow-sm"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  Gom nhóm / Chuyến xe
+                </button>
+              </div>
+            )}
 
           <button
             onClick={() => {
-              if (activeTab === "ORDERS") setIsBulkUploadModalOpen(true);
+              if (activeTab === "ORDERS") {
+                // Sử dụng duy nhất modal Nhập Excel
+                setIsExcelImportModalOpen(true);
+              }
             }}
             className={`${
               activeTab === "ORDERS" ? "flex" : "hidden"
-            } items-center gap-2 px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-600 font-semibold text-xs rounded-xl cursor-pointer transition-all border border-blue-200`}
+            } items-center gap-2 px-4 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold text-xs rounded-xl cursor-pointer transition-all border border-emerald-200`}
           >
-            <Upload className="w-4 h-4" />
-            Tạo đơn hàng loạt
+            <FileSpreadsheet className="w-4 h-4" />
+            Nhập Excel tạo đơn
           </button>
 
           <button
@@ -1460,78 +1355,82 @@ export default function OrdersManagementPage() {
                         {/* Actions */}
                         <td className="px-6 py-4 text-right space-y-1.5">
                           {/* Operative Lifecycle Quick Buttons */}
-                          <div className="flex items-center justify-end gap-1.5">
-                            {item.current_status === "PENDING" && (
-                              <button
-                                onClick={() =>
-                                  handleQuickScanIn(item.tracking_number)
-                                }
-                                className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded text-[10px] cursor-pointer"
-                                title="Quét nhập kho bưu cục bãi lấy hàng"
-                              >
-                                Nhập kho bãi
-                              </button>
-                            )}
-
-                            {item.current_status === "AT_HUB" && (
-                              <>
-                                <button
-                                  onClick={() =>
-                                    openAssignShipmentModal(item.id)
-                                  }
-                                  className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-bold rounded text-[10px] cursor-pointer flex items-center gap-1"
-                                >
-                                  <Truck className="w-3 h-3" />
-                                  Gom nhóm xe
-                                </button>
-
-                                {shippers.length > 0 && (
+                          {currentUser &&
+                            currentUser.role !== "CUSTOMER" &&
+                            currentUser.role !== "SHIPPER" && (
+                              <div className="flex items-center justify-end gap-1.5">
+                                {item.current_status === "PENDING" && (
                                   <button
                                     onClick={() =>
-                                      handleQuickScanOut(
-                                        item.tracking_number,
-                                        shippers[0].id,
-                                      )
+                                      handleQuickScanIn(item.tracking_number)
                                     }
-                                    className="px-2 py-1 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded text-[10px] cursor-pointer"
-                                    title="Quét bàn giao shipper đi giao"
+                                    className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded text-[10px] cursor-pointer"
+                                    title="Quét nhập kho bưu cục bãi lấy hàng"
                                   >
-                                    Bàn giao Shipper
+                                    Nhập kho bãi
                                   </button>
                                 )}
-                              </>
-                            )}
 
-                            {(item.current_status === "DELIVERING" ||
-                              item.current_status === "EXCEPTION") && (
-                              <>
-                                <button
-                                  onClick={() => handleQuickRetry(item.id)}
-                                  className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 font-bold rounded text-[10px] cursor-pointer"
-                                >
-                                  Giao lại
-                                </button>
-                                <button
-                                  onClick={() => handleQuickRts(item.id)}
-                                  className="px-2 py-1 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 font-bold rounded text-[10px] cursor-pointer"
-                                >
-                                  Chuyển hoàn
-                                </button>
-                              </>
-                            )}
+                                {item.current_status === "AT_HUB" && (
+                                  <>
+                                    <button
+                                      onClick={() =>
+                                        openAssignShipmentModal(item.id)
+                                      }
+                                      className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-bold rounded text-[10px] cursor-pointer flex items-center gap-1"
+                                    >
+                                      <Truck className="w-3 h-3" />
+                                      Gom nhóm xe
+                                    </button>
 
-                            {item.current_status === "FINISHED" &&
-                              item.cod_status === "PENDING" &&
-                              item.cod_amount > 0 && (
-                                <button
-                                  onClick={() => handleQuickRemit(item.id)}
-                                  className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded text-[10px] cursor-pointer flex items-center gap-1"
-                                >
-                                  <Check className="w-3 h-3" />
-                                  Nộp quỹ COD
-                                </button>
-                              )}
-                          </div>
+                                    {shippers.length > 0 && (
+                                      <button
+                                        onClick={() =>
+                                          handleQuickScanOut(
+                                            item.tracking_number,
+                                            shippers[0].id,
+                                          )
+                                        }
+                                        className="px-2 py-1 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded text-[10px] cursor-pointer"
+                                        title="Quét bàn giao shipper đi giao"
+                                      >
+                                        Bàn giao Shipper
+                                      </button>
+                                    )}
+                                  </>
+                                )}
+
+                                {(item.current_status === "DELIVERING" ||
+                                  item.current_status === "EXCEPTION") && (
+                                  <>
+                                    <button
+                                      onClick={() => handleQuickRetry(item.id)}
+                                      className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 font-bold rounded text-[10px] cursor-pointer"
+                                    >
+                                      Giao lại
+                                    </button>
+                                    <button
+                                      onClick={() => handleQuickRts(item.id)}
+                                      className="px-2 py-1 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 font-bold rounded text-[10px] cursor-pointer"
+                                    >
+                                      Chuyển hoàn
+                                    </button>
+                                  </>
+                                )}
+
+                                {item.current_status === "FINISHED" &&
+                                  item.cod_status === "PENDING" &&
+                                  item.cod_amount > 0 && (
+                                    <button
+                                      onClick={() => handleQuickRemit(item.id)}
+                                      className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded text-[10px] cursor-pointer flex items-center gap-1"
+                                    >
+                                      <Check className="w-3 h-3" />
+                                      Nộp quỹ COD
+                                    </button>
+                                  )}
+                              </div>
+                            )}
 
                           {/* Detail / Edit / Delete buttons */}
                           <div className="flex items-center justify-end gap-1.5 text-slate-400">
@@ -1562,13 +1461,15 @@ export default function OrdersManagementPage() {
                                 >
                                   <Edit2 className="w-4 h-4" />
                                 </button>
-                                <button
-                                  onClick={() => handleDeleteOrder(item.id)}
-                                  className="p-1 hover:text-red-650 cursor-pointer"
-                                  title="Xóa đơn hàng (soft delete)"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
+                                {item.current_status === "PENDING" && (
+                                  <button
+                                    onClick={() => handleDeleteOrder(item.id)}
+                                    className="p-1 hover:text-red-650 cursor-pointer"
+                                    title="Xóa đơn hàng (soft delete)"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                )}
                               </>
                             )}
                           </div>
@@ -2045,6 +1946,41 @@ export default function OrdersManagementPage() {
                     setOrderForm({ ...orderForm, note: e.target.value })
                   }
                 />
+              </div>
+
+              {/* Fee Estimate */}
+              <div className="bg-blue-50/50 p-4 border border-blue-100 rounded-xl">
+                {(() => {
+                  let fee = 0;
+                  if (tariff) {
+                    const weightBase = Number(tariff.base_rate) || 0;
+                    const stepRate = Number(tariff.step_rate) || 0;
+                    const codFeePercent = Number(tariff.cod_fee_percent) || 0;
+
+                    const codFee = (orderForm.cod_amount * codFeePercent) / 100;
+                    const extraWeight = Math.max(
+                      0,
+                      Math.ceil(orderForm.weight - 1),
+                    );
+                    const weightFee = weightBase + extraWeight * stepRate;
+                    fee = weightFee + codFee;
+                  }
+                  return (
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="font-bold text-slate-600">
+                        Phí vận chuyển & thu hộ dự kiến:
+                      </span>
+                      <span className="font-extrabold text-blue-700">
+                        {fee > 0
+                          ? new Intl.NumberFormat("vi-VN", {
+                              style: "currency",
+                              currency: "VND",
+                            }).format(fee)
+                          : "Đang tính toán..."}
+                      </span>
+                    </div>
+                  );
+                })()}
               </div>
 
               <div className="flex justify-end gap-2 pt-4 border-t border-slate-150">

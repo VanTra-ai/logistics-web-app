@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { Html5QrcodeScanner } from "html5-qrcode";
 import {
   Scan,
   ArrowLeftRight,
@@ -52,11 +53,14 @@ export default function StationPage() {
   // Load user & shippers
   useEffect(() => {
     const timer = setTimeout(() => {
+      let currentHubId: string | null = null;
       if (typeof window !== "undefined") {
         const savedUser = localStorage.getItem("user");
         if (savedUser) {
           try {
-            setCurrentUser(JSON.parse(savedUser) as LoggedInUser);
+            const parsed = JSON.parse(savedUser) as LoggedInUser;
+            setCurrentUser(parsed);
+            if (parsed.hub?.id) currentHubId = parsed.hub.id;
           } catch {
             // Do nothing
           }
@@ -70,7 +74,11 @@ export default function StationPage() {
           const usersList = response.data?.data || response.data || [];
           if (Array.isArray(usersList)) {
             const filteredShippers = usersList.filter(
-              (u: { role: string }) => u.role === "SHIPPER",
+              (u: { role: string; hub?: { id: string } }) => {
+                if (u.role !== "SHIPPER") return false;
+                if (currentHubId && u.hub?.id !== currentHubId) return false;
+                return true;
+              },
             );
             setShippers(filteredShippers);
             if (filteredShippers.length > 0) {
@@ -89,11 +97,6 @@ export default function StationPage() {
               id: "shipper-2",
               full_name: "Vũ Văn Bách",
               phone_number: "0945678901",
-            },
-            {
-              id: "shipper-3",
-              full_name: "Trần Văn Luận",
-              phone_number: "0934567890",
             },
           ];
           setShippers(mockShippers);
@@ -115,9 +118,9 @@ export default function StationPage() {
   }, [scanMode, scanResult]);
 
   // Xử lý quét mã vận đơn
-  const handleScanSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const trackingNum = trackingInput.trim().toUpperCase();
+  const handleScanSubmit = async (e?: React.FormEvent, rawCode?: string) => {
+    if (e) e.preventDefault();
+    const trackingNum = (rawCode || trackingInput).trim().toUpperCase();
     if (!trackingNum) return;
 
     if (processingScans.current.has(trackingNum)) {
@@ -126,12 +129,8 @@ export default function StationPage() {
     }
 
     processingScans.current.add(trackingNum);
-    setTimeout(() => {
-      processingScans.current.delete(trackingNum);
-    }, 2000);
-
     setIsLoading(true);
-    setTrackingInput("");
+    if (!rawCode) setTrackingInput("");
     setScanResult(null);
     setFlashColor(null);
 
@@ -140,78 +139,57 @@ export default function StationPage() {
       !process.env.NEXT_PUBLIC_API_URL ||
       currentUser?.role !== "HUB_COORDINATOR";
 
-    if (scanMode === "INBOUND") {
-      if (isDemo) {
-        setTimeout(() => {
+    try {
+      if (scanMode === "INBOUND") {
+        if (isDemo) {
+          await new Promise((r) => setTimeout(r, 600));
           setFlashColor("GREEN");
           setScanResult({
             success: true,
             title: "NHẬP KHO THÀNH CÔNG (DEMO)",
-            message: `Kiện hàng ${trackingNum} đã được ghi nhận nhập kho tại ${currentUser?.hub?.name || "Bưu cục Cầu Giấy"}. Phân loại kệ lưu trữ: KỆ PHÍA BẮC (Tuyến Tỉnh).`,
+            message: `Kiện hàng ${trackingNum} đã được ghi nhận nhập kho tại ${currentUser?.hub?.name || "Bưu cục Cầu Giấy"}.`,
             timestamp: new Date().toLocaleTimeString(),
           });
-          setIsLoading(false);
-        }, 600);
-        return;
-      }
+          return;
+        }
 
-      try {
-        await api.post("/orders/scan-in", {
-          tracking_numbers: [trackingNum],
-        });
+        await api.post("/orders/scan-in", { tracking_numbers: [trackingNum] });
         setFlashColor("GREEN");
         setScanResult({
           success: true,
           title: "NHẬP KHO THÀNH CÔNG",
-          message: `Vận đơn ${trackingNum} đã nhập kho thành công. Ghi nhận nhật ký: Nhập kho tại ${currentUser?.hub?.name || "Bưu cục"}.`,
+          message: `Vận đơn ${trackingNum} đã nhập kho thành công.`,
           timestamp: new Date().toLocaleTimeString(),
         });
-      } catch (err: unknown) {
-        const apiError = err as { response?: { data?: { message?: string } } };
-        setFlashColor("RED");
-        setScanResult({
-          success: false,
-          title: "NHẬP KHO THẤT BẠI",
-          message:
-            apiError.response?.data?.message ||
-            `Lỗi không xác định khi quét đơn ${trackingNum}.`,
-          timestamp: new Date().toLocaleTimeString(),
-        });
-      } finally {
-        setIsLoading(false);
-      }
-    } else {
-      // OUTBOUND
-      if (!selectedShipperId) {
-        setFlashColor("RED");
-        setScanResult({
-          success: false,
-          title: "THIẾU THÔNG TIN",
-          message: "Vui lòng chọn tài xế giao hàng trước khi quét xuất kho!",
-          timestamp: new Date().toLocaleTimeString(),
-        });
-        setIsLoading(false);
-        return;
-      }
+      } else {
+        // OUTBOUND
+        if (!selectedShipperId) {
+          setFlashColor("RED");
+          setScanResult({
+            success: false,
+            title: "THIẾU THÔNG TIN",
+            message: "Vui lòng chọn tài xế giao hàng trước khi quét xuất kho!",
+            timestamp: new Date().toLocaleTimeString(),
+          });
+          return;
+        }
 
-      const shipperName =
-        shippers.find((s) => s.id === selectedShipperId)?.full_name || "Tài xế";
+        const shipperName =
+          shippers.find((s) => s.id === selectedShipperId)?.full_name ||
+          "Tài xế";
 
-      if (isDemo) {
-        setTimeout(() => {
+        if (isDemo) {
+          await new Promise((r) => setTimeout(r, 600));
           setFlashColor("GREEN");
           setScanResult({
             success: true,
             title: "BÀN GIAO SHIPPER THÀNH CÔNG (DEMO)",
-            message: `Kiện hàng ${trackingNum} đã xuất kho bãi và bàn giao cho Shipper: ${shipperName}. Trạng thái chuyển thành: DELIVERING (Đang giao hàng).`,
+            message: `Kiện hàng ${trackingNum} đã xuất kho bãi và bàn giao cho Shipper: ${shipperName}.`,
             timestamp: new Date().toLocaleTimeString(),
           });
-          setIsLoading(false);
-        }, 600);
-        return;
-      }
+          return;
+        }
 
-      try {
         await api.post("/orders/scan-out", {
           tracking_numbers: [trackingNum],
           shipper_id: selectedShipperId,
@@ -223,22 +201,56 @@ export default function StationPage() {
           message: `Vận đơn ${trackingNum} đã xuất bến và bàn giao cho tài xế ${shipperName} giao hàng.`,
           timestamp: new Date().toLocaleTimeString(),
         });
-      } catch (err: unknown) {
-        const apiError = err as { response?: { data?: { message?: string } } };
-        setFlashColor("RED");
-        setScanResult({
-          success: false,
-          title: "XUẤT KHO THẤT BẠI",
-          message:
-            apiError.response?.data?.message ||
-            `Lỗi bàn giao tài xế đối với đơn hàng ${trackingNum}.`,
-          timestamp: new Date().toLocaleTimeString(),
-        });
-      } finally {
-        setIsLoading(false);
       }
+    } catch (err: unknown) {
+      const apiError = err as { response?: { data?: { message?: string } } };
+      setFlashColor("RED");
+      setScanResult({
+        success: false,
+        title:
+          scanMode === "INBOUND" ? "NHẬP KHO THẤT BẠI" : "XUẤT KHO THẤT BẠI",
+        message:
+          apiError.response?.data?.message ||
+          `Lỗi xử lý đơn hàng ${trackingNum}.`,
+        timestamp: new Date().toLocaleTimeString(),
+      });
+    } finally {
+      setIsLoading(false);
+      processingScans.current.delete(trackingNum);
     }
   };
+
+  // Khởi tạo Camera Scanner thật (Html5QrcodeScanner)
+  const scannerRef = useRef<Html5QrcodeScanner | null>(null);
+  useEffect(() => {
+    // Only init if not doing AI scan
+    if (isAiScanning) return;
+
+    scannerRef.current = new Html5QrcodeScanner(
+      "qr-reader",
+      { fps: 10, qrbox: { width: 250, height: 250 } },
+      false,
+    );
+    scannerRef.current.render(
+      (decodedText) => {
+        let trackingNumber = decodedText;
+        try {
+          const parsed = JSON.parse(decodedText);
+          if (parsed.tn) trackingNumber = parsed.tn;
+        } catch {
+          // ignore
+        }
+        handleScanSubmit(undefined, trackingNumber);
+      },
+      () => {},
+    );
+    return () => {
+      if (scannerRef.current) {
+        scannerRef.current.clear().catch(console.error);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scanMode, selectedShipperId, isAiScanning]);
 
   // Giả lập AI Camera quét thông minh
   const startAiScanSimulation = () => {
@@ -252,15 +264,7 @@ export default function StationPage() {
 
     setTimeout(() => {
       setIsAiScanning(false);
-      setTrackingInput(randCode);
-      // Gọi submit trực tiếp bằng mock trigger
-      setFlashColor("GREEN");
-      setScanResult({
-        success: true,
-        title: `AI SCANNER: PHÁT HIỆN KIỆN HÀNG (${scanMode === "INBOUND" ? "NHẬP KHO" : "BÀN GIAO"})`,
-        message: `Mã vận đơn ${randCode} đã được nhận diện qua AI Camera. Trọng lượng quét thực tế: ${Math.floor(2 + Math.random() * 10)} kg. Trạng thái phân loại: ĐẠT SLA.`,
-        timestamp: new Date().toLocaleTimeString(),
-      });
+      handleScanSubmit(undefined, randCode);
     }, 2500);
   };
 
@@ -288,8 +292,8 @@ export default function StationPage() {
               Trạm Quét & Phân Loại Đơn Hàng
             </h1>
             <p className="text-xs text-slate-500 mt-1">
-              Sử dụng máy quét cầm tay hoặc camera AI để xử lý dòng hàng hóa
-              Inbound/Outbound
+              Sử dụng máy quét cầm tay hoặc camera thực tế để xử lý dòng hàng
+              hóa Inbound/Outbound
             </p>
           </div>
         </div>
@@ -348,9 +352,9 @@ export default function StationPage() {
             </div>
 
             {/* Simulated camera scanning box */}
-            <div className="relative aspect-video bg-slate-950 rounded-2xl overflow-hidden border border-slate-800 flex items-center justify-center">
+            <div className="relative min-h-[250px] bg-slate-950 rounded-2xl overflow-hidden border border-slate-800 flex flex-col items-center justify-center">
               {isAiScanning ? (
-                <div className="text-center space-y-3">
+                <div className="text-center space-y-3 p-8">
                   <Camera className="w-12 h-12 text-blue-400 animate-bounce mx-auto" />
                   <p className="text-sm font-semibold tracking-wider text-blue-300">
                     AI ĐANG QUÉT KIỆN HÀNG...
@@ -360,24 +364,33 @@ export default function StationPage() {
                   </p>
                 </div>
               ) : (
-                <div className="text-center space-y-2.5 text-slate-500">
-                  <Scan className="w-10 h-10 mx-auto text-slate-700" />
-                  <p className="text-xs">
-                    Đưa mã vạch trước camera hoặc nhập bằng form bên dưới
-                  </p>
-                  <button
-                    onClick={startAiScanSimulation}
-                    className="flex items-center gap-2 mx-auto px-4 py-2 bg-blue-900/40 border border-blue-800 hover:bg-blue-800 hover:text-white text-blue-400 font-bold text-[11px] rounded-xl transition-all cursor-pointer mt-3"
-                  >
-                    <Camera className="w-3.5 h-3.5" />
-                    Kích hoạt quét AI (Camera Simulator)
-                  </button>
+                <div className="w-full h-full relative group flex flex-col">
+                  <div
+                    id="qr-reader"
+                    className="w-full border-none object-cover opacity-90"
+                  />
+                  <div className="absolute bottom-0 inset-x-0 p-4 flex flex-col items-center justify-center pointer-events-none text-slate-500 bg-gradient-to-t from-slate-900 via-slate-900/80 to-transparent transition-colors">
+                    <p className="text-xs text-slate-300 font-medium text-center drop-shadow-md">
+                      Hướng camera vào mã vận đơn hoặc quét bằng máy quét cầm
+                      tay
+                    </p>
+                    <button
+                      onClick={startAiScanSimulation}
+                      className="flex items-center gap-2 mx-auto px-4 py-2 bg-blue-900/60 border border-blue-800 hover:bg-blue-800 hover:text-white text-blue-300 font-bold text-[11px] rounded-xl pointer-events-auto mt-3 transition-all"
+                    >
+                      <Scan className="w-3.5 h-3.5" />
+                      Hoặc Kích hoạt quét giả lập
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
 
             {/* Scan form */}
-            <form onSubmit={handleScanSubmit} className="space-y-4">
+            <form
+              onSubmit={handleScanSubmit}
+              className="space-y-4 relative z-10"
+            >
               {scanMode === "OUTBOUND" && (
                 <div className="space-y-2">
                   <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider">
@@ -404,7 +417,7 @@ export default function StationPage() {
 
               <div className="space-y-2">
                 <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                  Mã vận đơn (Barcode)
+                  Mã vận đơn (Barcode) - Nhập thủ công
                 </label>
                 <div className="relative">
                   <input
@@ -450,7 +463,9 @@ export default function StationPage() {
                       <AlertCircle className="w-16 h-16 text-red-500 mx-auto" />
                     )}
                     <h3
-                      className={`text-md font-extrabold mt-3 tracking-wide ${scanResult.success ? "text-emerald-600" : "text-red-600"}`}
+                      className={`text-md font-extrabold mt-3 tracking-wide ${
+                        scanResult.success ? "text-emerald-600" : "text-red-600"
+                      }`}
                     >
                       {scanResult.title}
                     </h3>

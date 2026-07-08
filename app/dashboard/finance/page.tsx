@@ -13,6 +13,7 @@ import {
   Scale,
 } from "lucide-react";
 import api from "@/lib/axios";
+import axios from "axios";
 
 interface TariffConfig {
   base_price_distance: number;
@@ -56,11 +57,14 @@ export default function FinanceTariffPage() {
       }
       setIsDemoMode(false);
     } catch (err) {
-      console.warn(
-        "Lỗi tải cấu hình tài chính từ backend. Kích hoạt chế độ giả lập (Demo Mode).",
-        err,
-      );
-      setIsDemoMode(true);
+      console.warn("Lỗi tải cấu hình tài chính từ backend.", err);
+      if (axios.isAxiosError(err) && err.response?.status === 403) {
+        setNotification({
+          type: "error",
+          message: "Bạn không có quyền xem bảng giá và hoa hồng",
+        });
+      }
+      setIsDemoMode(false);
     } finally {
       setIsLoading(false);
     }

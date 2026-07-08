@@ -13,6 +13,7 @@ import {
   ClipboardList,
 } from "lucide-react";
 import api from "@/lib/axios";
+import axios from "axios";
 
 interface Hub {
   id: string;
@@ -93,65 +94,15 @@ export default function ExceptionsPage() {
         throw new Error("Dữ liệu đơn hàng không đúng định dạng");
       }
     } catch (error) {
-      console.warn("Không kết nối được backend. Chuyển sang Demo Mode.", error);
-      // Demo Mode fallback
-      const mockOrders: Order[] = [
-        {
-          id: "ord-1",
-          tracking_number: "ORD-9481",
-          sender_name: "Nguyễn Văn Gửi",
-          receiver_name: "Lê Văn Nhận",
-          receiver_phone: "0912345678",
-          receiver_address: "Lê Lợi, Hải Phòng",
-          weight: 1.2,
-          cod_amount: 500000,
-          current_status: "AT_HUB",
-          created_at: "2026-07-01T08:00:00Z",
-          pickup_hub: { id: "hub-1", name: "Bưu cục Cầu Giấy" },
-        },
-        {
-          id: "ord-2",
-          tracking_number: "ORD-8512",
-          sender_name: "Trần Thị Gửi",
-          receiver_name: "Hoàng Văn Nhận",
-          receiver_phone: "0945678901",
-          receiver_address: "Lạch Tray, Hải Phòng",
-          weight: 2.5,
-          cod_amount: 1200000,
-          current_status: "AT_HUB",
-          created_at: "2026-07-02T09:30:00Z",
-          pickup_hub: { id: "hub-1", name: "Bưu cục Cầu Giấy" },
-        },
-        {
-          id: "ord-3",
-          tracking_number: "ORD-1234",
-          sender_name: "Phạm Văn Gửi",
-          receiver_name: "Phùng Văn Nhận",
-          receiver_phone: "0934567890",
-          receiver_address: "Ngô Quyền, Hải Phòng",
-          weight: 0.8,
-          cod_amount: 0,
-          current_status: "EXCEPTION",
-          created_at: "2026-07-03T10:15:00Z",
-          pickup_hub: { id: "hub-1", name: "Bưu cục Cầu Giấy" },
-          note: "Hàng bị móp méo rách tem mác nhẹ",
-        },
-        {
-          id: "ord-4",
-          tracking_number: "ORD-5678",
-          sender_name: "Đỗ Văn Gửi",
-          receiver_name: "Trịnh Văn Nhận",
-          receiver_phone: "0956789012",
-          receiver_address: "Quận 1, TP. HCM",
-          weight: 5.0,
-          cod_amount: 3500000,
-          current_status: "AT_HUB",
-          created_at: "2026-07-04T11:00:00Z",
-          pickup_hub: { id: "hub-1", name: "Bưu cục Cầu Giấy" },
-        },
-      ];
-      setOrders(mockOrders);
-      setIsDemoMode(true);
+      console.warn("Không kết nối được backend.", error);
+      if (axios.isAxiosError(error) && error.response?.status === 403) {
+        setNotification({
+          type: "error",
+          message: "Bạn không có quyền truy cập thông tin xử lý ngoại lệ",
+        });
+      }
+      setOrders([]);
+      setIsDemoMode(false);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
