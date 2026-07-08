@@ -18,10 +18,8 @@ import {
   Users,
   ScanLine,
   AlertCircle,
-  Coins,
   MapPin,
   ClipboardList,
-  PieChart,
   AlertTriangle,
   Wallet,
 } from "lucide-react";
@@ -100,7 +98,11 @@ export default function DashboardLayout({
       return [
         { name: "Tổng quan", href: "/dashboard", icon: LayoutDashboard },
         { name: "Đơn hàng của tôi", href: "/dashboard/orders", icon: Package },
-        { name: "Ví tài xế", href: "/dashboard/finance/wallets", icon: Wallet },
+        {
+          name: "Ví của tôi",
+          href: "/dashboard/finance/wallets",
+          icon: Wallet,
+        },
         { name: "Cài đặt", href: "/dashboard/settings", icon: Settings },
       ];
     }
@@ -127,29 +129,24 @@ export default function DashboardLayout({
       { name: "Điều phối Chuyến xe", href: "/dashboard/dispatch", icon: Truck },
       { name: "Hệ thống Bưu cục", href: "/dashboard/hubs", icon: Building2 },
       { name: "Quản lý Nhân sự", href: "/dashboard/users", icon: Users },
-      { name: "Quản lý Tài chính", href: "/dashboard/finance", icon: Coins },
       { name: "TMS Dashboard", href: "/dashboard/tms", icon: MapPin },
-      { name: "Quản lý Vật tư", href: "/dashboard/materials", icon: Package },
-      { name: "Vị trí Kệ hàng", href: "/dashboard/locations", icon: MapPin },
       {
         name: "Sự cố & Ngoại lệ",
         href: "/dashboard/exceptions",
         icon: AlertCircle,
       },
       { name: "Kiểm kê Kho", href: "/dashboard/audits", icon: ClipboardList },
-      { name: "Báo cáo & SLA", href: "/dashboard/statistics", icon: BarChart3 },
-      { name: "Báo cáo BI", href: "/dashboard/reports", icon: PieChart },
-      {
-        name: "Nhật ký Hệ thống",
-        href: "/dashboard/audit-logs",
-        icon: ClipboardList,
-      },
+      { name: "Báo cáo SLA", href: "/dashboard/statistics", icon: BarChart3 },
       {
         name: "Quản lý Sự cố",
         href: "/dashboard/incidents",
         icon: AlertTriangle,
       },
-      { name: "Ví tài xế", href: "/dashboard/finance/wallets", icon: Wallet },
+      {
+        name: "Ví / Đối soát",
+        href: "/dashboard/finance/wallets",
+        icon: Wallet,
+      },
       { name: "Cài đặt", href: "/dashboard/settings", icon: Settings },
     ];
   };

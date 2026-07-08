@@ -93,13 +93,19 @@ export default function FinanceTariffPage() {
 
     try {
       await api.patch("/finance/tariff", {
-        base_price_distance: Number(config.base_price_distance),
-        base_distance_limit: Number(config.base_distance_limit),
-        block_price_distance: Number(config.block_price_distance),
-        cod_fee_percent: Number(config.cod_fee_percent),
-        hub_commission_percent: Number(config.hub_commission_percent),
-        shipper_payout_flat: Number(config.shipper_payout_flat),
-        shipper_payout_percent: Number(config.shipper_payout_percent),
+        base_price_distance: Math.round(Number(config.base_price_distance)),
+        base_distance_limit: Number(
+          Number(config.base_distance_limit).toFixed(2),
+        ),
+        block_price_distance: Math.round(Number(config.block_price_distance)),
+        cod_fee_percent: Number(Number(config.cod_fee_percent).toFixed(2)),
+        hub_commission_percent: Number(
+          Number(config.hub_commission_percent).toFixed(2),
+        ),
+        shipper_payout_flat: Math.round(Number(config.shipper_payout_flat)),
+        shipper_payout_percent: Number(
+          Number(config.shipper_payout_percent).toFixed(2),
+        ),
       });
       setNotification({
         type: "success",
