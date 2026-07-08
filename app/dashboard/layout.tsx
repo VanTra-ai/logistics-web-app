@@ -22,6 +22,7 @@ import {
   ClipboardList,
   PieChart,
   AlertTriangle,
+  Wallet,
 } from "lucide-react";
 import api from "@/lib/axios";
 
@@ -95,6 +96,11 @@ export default function DashboardLayout({
         name: "Quản lý Sự cố",
         href: "/dashboard/incidents",
         icon: AlertTriangle,
+      },
+      {
+        name: "Ví tài xế",
+        href: "/dashboard/finance/wallets",
+        icon: Wallet,
       },
       { name: "Cài đặt", href: "/dashboard/settings", icon: Settings },
     ];
