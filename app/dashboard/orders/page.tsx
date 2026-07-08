@@ -1461,7 +1461,7 @@ export default function OrdersManagementPage() {
                                 >
                                   <Edit2 className="w-4 h-4" />
                                 </button>
-                                {item.current_status === "PENDING" && (
+                                {item.current_status === "PENDING" && !item.shipment && (
                                   <button
                                     onClick={() => handleDeleteOrder(item.id)}
                                     className="p-1 hover:text-red-650 cursor-pointer"

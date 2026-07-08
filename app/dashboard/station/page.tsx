@@ -120,15 +120,20 @@ export default function StationPage() {
   // Xử lý quét mã vận đơn
   const handleScanSubmit = async (e?: React.FormEvent, rawCode?: string) => {
     if (e) e.preventDefault();
-    const trackingNum = (rawCode || trackingInput).trim().toUpperCase();
-    if (!trackingNum) return;
+    const rawValue = (rawCode || trackingInput).trim().toUpperCase();
+    if (!rawValue) return;
 
-    if (processingScans.current.has(trackingNum)) {
-      console.warn("Mã vận đơn đang được xử lý quét:", trackingNum);
+    const trackingNumbers = Array.from(new Set(rawValue.split(/[\s,]+/).filter((t) => t.length > 0)));
+    if (trackingNumbers.length === 0) return;
+
+    // Filter out already processing scans
+    const newScans = trackingNumbers.filter((t) => !processingScans.current.has(t));
+    if (newScans.length === 0) {
+      console.warn("Tất cả các mã vận đơn đã hoặc đang được xử lý.");
       return;
     }
 
-    processingScans.current.add(trackingNum);
+    newScans.forEach((t) => processingScans.current.add(t));
     setIsLoading(true);
     if (!rawCode) setTrackingInput("");
     setScanResult(null);
@@ -147,18 +152,18 @@ export default function StationPage() {
           setScanResult({
             success: true,
             title: "NHẬP KHO THÀNH CÔNG (DEMO)",
-            message: `Kiện hàng ${trackingNum} đã được ghi nhận nhập kho tại ${currentUser?.hub?.name || "Bưu cục Cầu Giấy"}.`,
+            message: `${newScans.length} kiện hàng đã được ghi nhận nhập kho tại ${currentUser?.hub?.name || "Bưu cục Cầu Giấy"}.`,
             timestamp: new Date().toLocaleTimeString(),
           });
           return;
         }
 
-        await api.post("/orders/scan-in", { tracking_numbers: [trackingNum] });
+        await api.post("/orders/scan-in", { tracking_numbers: newScans });
         setFlashColor("GREEN");
         setScanResult({
           success: true,
           title: "NHẬP KHO THÀNH CÔNG",
-          message: `Vận đơn ${trackingNum} đã nhập kho thành công.`,
+          message: `${newScans.length} vận đơn đã nhập kho thành công.`,
           timestamp: new Date().toLocaleTimeString(),
         });
       } else {
@@ -184,21 +189,21 @@ export default function StationPage() {
           setScanResult({
             success: true,
             title: "BÀN GIAO SHIPPER THÀNH CÔNG (DEMO)",
-            message: `Kiện hàng ${trackingNum} đã xuất kho bãi và bàn giao cho Shipper: ${shipperName}.`,
+            message: `${newScans.length} kiện hàng đã xuất kho bãi và bàn giao cho Shipper: ${shipperName}.`,
             timestamp: new Date().toLocaleTimeString(),
           });
           return;
         }
 
         await api.post("/orders/scan-out", {
-          tracking_numbers: [trackingNum],
+          tracking_numbers: newScans,
           shipper_id: selectedShipperId,
         });
         setFlashColor("GREEN");
         setScanResult({
           success: true,
           title: "BÀN GIAO THÀNH CÔNG",
-          message: `Vận đơn ${trackingNum} đã xuất bến và bàn giao cho tài xế ${shipperName} giao hàng.`,
+          message: `${newScans.length} vận đơn đã xuất bến và bàn giao cho tài xế ${shipperName} giao hàng.`,
           timestamp: new Date().toLocaleTimeString(),
         });
       }
@@ -207,16 +212,15 @@ export default function StationPage() {
       setFlashColor("RED");
       setScanResult({
         success: false,
-        title:
-          scanMode === "INBOUND" ? "NHẬP KHO THẤT BẠI" : "XUẤT KHO THẤT BẠI",
+        title: "LỖI HỆ THỐNG",
         message:
           apiError.response?.data?.message ||
-          `Lỗi xử lý đơn hàng ${trackingNum}.`,
+          "Không thể xử lý quét, vui lòng thử lại.",
         timestamp: new Date().toLocaleTimeString(),
       });
     } finally {
+      newScans.forEach((t) => processingScans.current.delete(t));
       setIsLoading(false);
-      processingScans.current.delete(trackingNum);
     }
   };
 

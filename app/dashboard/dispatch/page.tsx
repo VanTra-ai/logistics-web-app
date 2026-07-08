@@ -139,8 +139,10 @@ export default function DispatchPage() {
       const ordersList = ordersRes.data?.data || ordersRes.data || [];
       if (Array.isArray(ordersList)) {
         const atHubOrders = ordersList.filter(
-          (o: Order & { shipment?: unknown }) =>
-            o.current_status === "AT_HUB" && !o.shipment,
+          (o: Order & { shipment?: unknown; pickup_hub?: { id: string } }) =>
+            o.current_status === "AT_HUB" &&
+            !o.shipment &&
+            (!currentHubId || o.pickup_hub?.id === currentHubId),
         );
         setAvailableOrders(atHubOrders);
       }
