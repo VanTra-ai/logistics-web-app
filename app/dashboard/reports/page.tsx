@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import api from "@/lib/axios";
 import {
   BarChart,
   Bar,
@@ -115,6 +116,28 @@ const initialCodData = [
 
 export default function ReportsPage() {
   const [codData, setCodData] = useState(initialCodData);
+  const [pnlData, setPnlData] = useState({ revenue: 0, costs: 0, pnl: 0 });
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+
+  useEffect(() => {
+    const fetchPnl = async () => {
+      try {
+        let url = "/reports/pnl";
+        const params = new URLSearchParams();
+        if (startDate) params.append("startDate", startDate);
+        if (endDate) params.append("endDate", endDate);
+        if (startDate || endDate) url += `?${params.toString()}`;
+        const res = await api.get(url);
+        if (res.data) {
+          setPnlData(res.data);
+        }
+      } catch (error) {
+        console.error("Lỗi lấy dữ liệu P&L", error);
+      }
+    };
+    fetchPnl();
+  }, [startDate, endDate]);
 
   const handleConfirmCollection = (id: string) => {
     setCodData((prev) =>
@@ -123,6 +146,11 @@ export default function ReportsPage() {
       ),
     );
   };
+
+  // Cập nhật lại giá trị KPI từ backend
+  const dynamicKpiData = [...kpiData];
+  dynamicKpiData[0].value = `${pnlData.pnl.toLocaleString("vi-VN")} ₫`;
+  dynamicKpiData[0].title = "Lợi Nhuận Gộp (P&L)";
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
@@ -136,15 +164,35 @@ export default function ReportsPage() {
             Theo dõi hiệu suất vận hành và dòng tiền tổng quan
           </p>
         </div>
-        <button className="flex items-center gap-2 bg-white border border-slate-200 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-50 transition-colors shadow-sm font-medium text-sm">
-          <Download className="w-4 h-4" />
-          Xuất Báo Cáo
-        </button>
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-1.5 shadow-sm">
+            <span className="text-sm text-slate-500">Từ:</span>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="text-sm outline-none bg-transparent text-slate-700"
+            />
+          </div>
+          <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-1.5 shadow-sm">
+            <span className="text-sm text-slate-500">Đến:</span>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="text-sm outline-none bg-transparent text-slate-700"
+            />
+          </div>
+          <button className="flex items-center gap-2 bg-white border border-slate-200 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-50 transition-colors shadow-sm font-medium text-sm">
+            <Download className="w-4 h-4" />
+            Xuất Báo Cáo
+          </button>
+        </div>
       </div>
 
       {/* Row 1: KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {kpiData.map((kpi, index) => (
+        {dynamicKpiData.map((kpi, index) => (
           <div
             key={index}
             className="bg-white rounded-xl p-6 border border-slate-100 shadow-sm hover:shadow-md transition-shadow"

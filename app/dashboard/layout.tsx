@@ -36,7 +36,10 @@ interface LoggedInUser {
 
 interface NotificationItem {
   id?: string;
+  title?: string;
   message?: string;
+  type?: string;
+  isRead?: boolean;
   createdAt?: string;
 }
 
@@ -136,6 +139,7 @@ export default function DashboardLayout({
         icon: AlertCircle,
       },
       { name: "Kiểm kê Kho", href: "/dashboard/audits", icon: ClipboardList },
+      { name: "Quản lý Vật tư", href: "/dashboard/materials", icon: Package },
       { name: "Báo cáo SLA", href: "/dashboard/statistics", icon: BarChart3 },
       {
         name: "Quản lý Sự cố",
@@ -208,6 +212,22 @@ export default function DashboardLayout({
 
   useEffect(() => {
     if (!user) return;
+    let isSubscribed = true;
+
+    // Fetch initial notifications
+    const fetchNotifications = async () => {
+      try {
+        const res = await api.get("/notifications");
+        if (isSubscribed && res.data?.data) {
+          const fetchedNotifs = res.data.data;
+          setNotifications(fetchedNotifs);
+          setUnreadCount(fetchedNotifs.filter((n: NotificationItem) => !n.isRead).length);
+        }
+      } catch (error) {
+        console.error("Lỗi lấy danh sách thông báo:", error);
+      }
+    };
+    fetchNotifications();
 
     const token = localStorage.getItem("token");
     const socket = io(
@@ -228,6 +248,7 @@ export default function DashboardLayout({
     });
 
     return () => {
+      isSubscribed = false;
       socket.disconnect();
     };
   }, [user]);
@@ -362,9 +383,19 @@ export default function DashboardLayout({
           <div className="flex items-center gap-4 relative">
             <button
               className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors relative cursor-pointer"
-              onClick={() => {
+              onClick={async () => {
                 setShowNotifDropdown(!showNotifDropdown);
-                if (unreadCount > 0) setUnreadCount(0);
+                if (unreadCount > 0) {
+                  setUnreadCount(0);
+                  try {
+                    await api.patch("/notifications/mark-all-read");
+                    setNotifications((prev) =>
+                      prev.map((n) => ({ ...n, isRead: true })),
+                    );
+                  } catch (e) {
+                    console.error("Failed to mark notifications as read", e);
+                  }
+                }
               }}
             >
               <Bell className="w-5 h-5" />
