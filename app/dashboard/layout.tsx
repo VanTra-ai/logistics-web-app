@@ -25,6 +25,7 @@ import {
   Wallet,
 } from "lucide-react";
 import api from "@/lib/axios";
+import { io } from "socket.io-client";
 
 interface LoggedInUser {
   id: string;
@@ -32,6 +33,12 @@ interface LoggedInUser {
   full_name: string;
   role: string;
   hub?: { id: string; name: string } | null;
+}
+
+interface NotificationItem {
+  id?: string;
+  message?: string;
+  createdAt?: string;
 }
 
 export default function DashboardLayout({
@@ -44,6 +51,11 @@ export default function DashboardLayout({
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [user, setUser] = useState<LoggedInUser | null>(null);
   const [isAuthorized, setIsAuthorized] = useState(false);
+
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [showNotifDropdown, setShowNotifDropdown] = useState(false);
+  const [toastNotif, setToastNotif] = useState<string | null>(null);
 
   const getSidebarLinks = () => {
     if (!user) return [];
@@ -132,6 +144,25 @@ export default function DashboardLayout({
     }, 0);
     return () => clearTimeout(timer);
   }, [router]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const socket = io(
+      process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000",
+    );
+
+    socket.on("new_notification", (data: NotificationItem) => {
+      setNotifications((prev) => [data, ...prev]);
+      setUnreadCount((prev) => prev + 1);
+      setToastNotif(data.message || "Bạn có thông báo mới");
+      setTimeout(() => setToastNotif(null), 3000);
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [user]);
 
   const handleLogout = async () => {
     try {
@@ -260,11 +291,51 @@ export default function DashboardLayout({
             </h2>
           </div>
 
-          <div className="flex items-center gap-4">
-            <button className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors relative cursor-pointer">
+          <div className="flex items-center gap-4 relative">
+            <button
+              className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors relative cursor-pointer"
+              onClick={() => {
+                setShowNotifDropdown(!showNotifDropdown);
+                if (unreadCount > 0) setUnreadCount(0);
+              }}
+            >
               <Bell className="w-5 h-5" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
+              {unreadCount > 0 && (
+                <span className="absolute top-0.5 right-0.5 min-w-[1.25rem] h-5 px-1 bg-red-500 text-white text-[10px] font-bold flex items-center justify-center rounded-full border-2 border-white">
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </span>
+              )}
             </button>
+
+            {/* Notification Dropdown */}
+            {showNotifDropdown && (
+              <div className="absolute top-full right-14 mt-2 w-80 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden z-50">
+                <div className="p-3 border-b border-slate-100 bg-slate-50 font-semibold text-slate-700 flex justify-between items-center">
+                  Thông báo
+                </div>
+                <div className="max-h-80 overflow-y-auto">
+                  {notifications.length === 0 ? (
+                    <div className="p-4 text-center text-sm text-slate-500">
+                      Không có thông báo mới
+                    </div>
+                  ) : (
+                    notifications.map((n, i) => (
+                      <div
+                        key={i}
+                        className="p-3 border-b border-slate-50 hover:bg-slate-50 cursor-pointer"
+                      >
+                        <p className="text-sm text-slate-800">
+                          {n.message || "Thông báo mới"}
+                        </p>
+                        <p className="text-xs text-slate-400 mt-1">
+                          {new Date().toLocaleTimeString()}
+                        </p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
 
             <div className="h-8 w-px bg-slate-200 mx-2"></div>
 
@@ -283,6 +354,19 @@ export default function DashboardLayout({
             </div>
           </div>
         </header>
+
+        {toastNotif && (
+          <div className="fixed top-20 right-6 z-50 bg-blue-600 text-white px-4 py-3 rounded-xl shadow-lg flex items-center gap-3 transition-all duration-300 transform translate-y-0 opacity-100">
+            <Bell className="w-4 h-4" />
+            <span className="text-sm font-medium">{toastNotif}</span>
+            <button
+              onClick={() => setToastNotif(null)}
+              className="ml-2 hover:bg-blue-700 p-1 rounded-full"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+        )}
 
         {/* Khu vực render nội dung các trang con (Orders, Hubs,...) */}
         <main className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8">

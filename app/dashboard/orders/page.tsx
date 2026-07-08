@@ -24,6 +24,7 @@ import {
   FileSpreadsheet,
 } from "lucide-react";
 import api from "@/lib/axios";
+import BulkUploadModal from "@/components/BulkUploadModal";
 
 interface Hub {
   id: string;
@@ -111,6 +112,7 @@ export default function OrdersManagementPage() {
   const [excelImportFile, setExcelImportFile] = useState<File | null>(null);
   const [excelImportErrors, setExcelImportErrors] = useState<string[]>([]);
   const [exportDate, setExportDate] = useState<string>("");
+  const [isBulkUploadModalOpen, setIsBulkUploadModalOpen] = useState(false);
 
   const [shipmentSearch, setShipmentSearch] = useState("");
   const [shipmentStatusFilter, setShipmentStatusFilter] = useState("ALL");
@@ -1236,6 +1238,18 @@ export default function OrdersManagementPage() {
               </button>
             </div>
           )}
+
+          <button
+            onClick={() => {
+              if (activeTab === "ORDERS") setIsBulkUploadModalOpen(true);
+            }}
+            className={`${
+              activeTab === "ORDERS" ? "flex" : "hidden"
+            } items-center gap-2 px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-600 font-semibold text-xs rounded-xl cursor-pointer transition-all border border-blue-200`}
+          >
+            <Upload className="w-4 h-4" />
+            Tạo đơn hàng loạt
+          </button>
 
           <button
             onClick={() => {
@@ -2490,6 +2504,14 @@ export default function OrdersManagementPage() {
           </div>
         </div>
       )}
+      {/* Bulk Upload Modal */}
+      <BulkUploadModal
+        isOpen={isBulkUploadModalOpen}
+        onClose={() => setIsBulkUploadModalOpen(false)}
+        onSuccess={() => {
+          loadCoreData();
+        }}
+      />
     </div>
   );
 }
