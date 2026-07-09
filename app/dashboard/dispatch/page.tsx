@@ -94,20 +94,26 @@ export default function DispatchPage() {
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
   const [isSubmitLoading, setIsSubmitLoading] = useState(false);
 
+  // Admin: Hub filter để xem toàn bộ hạm đội
+  const [adminHubFilter, setAdminHubFilter] = useState<string>("");
+
   // Load initial data
-  const loadData = async () => {
+  const loadData = async (overrideHubId?: string) => {
     setIsLoading(true);
     setNotification(null);
 
     // Get current user from localStorage
-    let currentHubId: string | null = null;
+    let currentHubId: string | null = overrideHubId || null;
     if (typeof window !== "undefined") {
       const savedUser = localStorage.getItem("user");
       if (savedUser) {
         try {
           const parsed = JSON.parse(savedUser) as LoggedInUser;
-          setCurrentUser(parsed);
-          if (parsed.hub?.id) currentHubId = parsed.hub.id;
+          setCurrentUser((prev) => prev || parsed);
+          // Admin dùng overrideHubId (filter), Coordinator dùng hub của mình
+          if (!overrideHubId && parsed.hub?.id && parsed.role !== "ADMIN") {
+            currentHubId = parsed.hub.id;
+          }
         } catch {
           // Do nothing
         }
@@ -122,7 +128,9 @@ export default function DispatchPage() {
 
       // 2. Load shippers list for dispatch
       if (currentHubId) {
-        const usersRes = await api.get(`/users/dispatch-shippers?hubId=${currentHubId}`);
+        const usersRes = await api.get(
+          `/users/dispatch-shippers?hubId=${currentHubId}`,
+        );
         const shippersList = usersRes.data?.data || usersRes.data || [];
         if (Array.isArray(shippersList)) {
           setShippers(shippersList);
@@ -193,6 +201,15 @@ export default function DispatchPage() {
     }, 0);
     return () => clearTimeout(timer);
   }, []);
+
+  // Admin: reload khi đổi filter hub
+  useEffect(() => {
+    if (currentUser?.role === "ADMIN") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      loadData(adminHubFilter || undefined);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adminHubFilter]);
 
   useEffect(() => {
     if (notification) {
@@ -412,6 +429,33 @@ export default function DispatchPage() {
           Tạo chuyến xe mới
         </button>
       </div>
+
+      {/* Admin Hub Filter */}
+      {currentUser?.role === "ADMIN" && (
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3">
+          <MapPin className="w-4 h-4 text-blue-500 shrink-0" />
+          <span className="text-xs font-bold text-slate-600 shrink-0">
+            Giám sát Bưu cục:
+          </span>
+          <select
+            className="flex-1 text-xs px-3 py-2 bg-slate-50 border border-slate-250 text-slate-700 rounded-xl outline-none focus:border-blue-500"
+            value={adminHubFilter}
+            onChange={(e) => setAdminHubFilter(e.target.value)}
+          >
+            <option value="">🌏 Toàn quốc — Xem tất cả chuyến xe</option>
+            {hubs.map((h) => (
+              <option key={h.id} value={h.id}>
+                🏢 {h.name}
+              </option>
+            ))}
+          </select>
+          {adminHubFilter && (
+            <span className="text-[10px] text-blue-600 font-semibold shrink-0">
+              Đang lọc: {hubs.find((h) => h.id === adminHubFilter)?.name}
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Grid of Shipments */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
