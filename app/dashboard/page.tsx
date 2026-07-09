@@ -34,16 +34,98 @@ interface OrderStatItem {
 
 interface OrderData {
   id: string;
-  customer?: string;
-  destination?: string;
+  tracking_number?: string;
+  receiver_name?: string;
+  receiver_address?: string;
   weight?: string | number;
   current_status?: string;
-  receiver_name?: string;
-  receiver?: string;
-  receiver_address?: string;
-  address?: string;
   cod_amount?: number;
   created_at?: string;
+}
+
+// ─── File-scoped utility functions shared across all sub-components ──────────
+
+function translateStatus(status: string): string {
+  switch (status) {
+    case "PENDING":
+      return "Chờ xử lý";
+    case "PICKED_UP":
+      return "Đã lấy hàng";
+    case "AT_HUB":
+      return "Đã nhập kho";
+    case "IN_TRANSIT":
+      return "Đang vận chuyển";
+    case "DELIVERING":
+      return "Đang giao";
+    case "FINISHED":
+      return "Hoàn thành";
+    case "RETURN_REQUESTED":
+      return "Yêu cầu hoàn";
+    case "RETURNING":
+      return "Đang hoàn hàng";
+    case "RETURNED":
+      return "Đã hoàn hàng";
+    case "CANCELLED":
+      return "Đã hủy";
+    default:
+      return status;
+  }
+}
+
+function getStatusBadgeClass(status: string): string {
+  switch (status) {
+    case "PENDING":
+      return "bg-amber-50 text-amber-700 border border-amber-100";
+    case "PICKED_UP":
+      return "bg-sky-50 text-sky-700 border border-sky-100";
+    case "AT_HUB":
+      return "bg-indigo-50 text-indigo-700 border border-indigo-100";
+    case "IN_TRANSIT":
+      return "bg-purple-50 text-purple-700 border border-purple-100";
+    case "DELIVERING":
+      return "bg-blue-50 text-blue-700 border border-blue-100";
+    case "FINISHED":
+      return "bg-emerald-50 text-emerald-700 border border-emerald-100";
+    case "RETURN_REQUESTED":
+    case "RETURNING":
+      return "bg-orange-50 text-orange-700 border border-orange-100";
+    case "RETURNED":
+      return "bg-yellow-50 text-yellow-700 border border-yellow-100";
+    case "CANCELLED":
+      return "bg-red-50 text-red-700 border border-red-100";
+    default:
+      return "bg-slate-50 text-slate-700 border border-slate-100";
+  }
+}
+
+function getStatusColor(status: string): string {
+  switch (status) {
+    case "PENDING":
+      return "#F59E0B";
+    case "DELIVERING":
+      return "#3B82F6";
+    case "FINISHED":
+      return "#10B981";
+    case "CANCELLED":
+      return "#EF4444";
+    default:
+      return "#64748B";
+  }
+}
+
+function getStatusBgColor(status: string): string {
+  switch (status) {
+    case "PENDING":
+      return "bg-amber-500";
+    case "DELIVERING":
+      return "bg-blue-500";
+    case "FINISHED":
+      return "bg-emerald-500";
+    case "CANCELLED":
+      return "bg-red-500";
+    default:
+      return "bg-slate-500";
+  }
 }
 
 export default function DashboardPage() {
@@ -97,7 +179,11 @@ export default function DashboardPage() {
         );
         const ordData = ordersRes.data?.data || ordersRes.data || [];
         if (Array.isArray(ordData)) {
-          ordData.sort((a: OrderData, b: OrderData) => new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime());
+          ordData.sort(
+            (a: OrderData, b: OrderData) =>
+              new Date(b.created_at || "").getTime() -
+              new Date(a.created_at || "").getTime(),
+          );
           setRecentOrders(ordData.slice(0, 5));
         }
       } catch (e) {
@@ -160,53 +246,6 @@ export default function DashboardPage() {
   const finishedCount = getStatusCount("FINISHED");
   const deliveringCount = getStatusCount("DELIVERING");
   const pendingCount = getStatusCount("PENDING");
-
-  // Quy đổi tên trạng thái sang Tiếng Việt
-  const translateStatus = (status: string) => {
-    switch (status) {
-      case "PENDING":
-        return "Chờ xử lý";
-      case "DELIVERING":
-        return "Đang giao";
-      case "FINISHED":
-        return "Hoàn thành";
-      case "CANCELLED":
-        return "Đã hủy";
-      default:
-        return status;
-    }
-  };
-
-  // Màu sắc tương ứng cho các trạng thái
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "PENDING":
-        return "#F59E0B"; // Amber
-      case "DELIVERING":
-        return "#3B82F6"; // Blue
-      case "FINISHED":
-        return "#10B981"; // Emerald
-      case "CANCELLED":
-        return "#EF4444"; // Red
-      default:
-        return "#64748B"; // Slate
-    }
-  };
-
-  const getStatusBgColor = (status: string) => {
-    switch (status) {
-      case "PENDING":
-        return "bg-amber-500";
-      case "DELIVERING":
-        return "bg-blue-500";
-      case "FINISHED":
-        return "bg-emerald-500";
-      case "CANCELLED":
-        return "bg-red-500";
-      default:
-        return "bg-slate-500";
-    }
-  };
 
   // LOGIC VẼ BIỂU ĐỒ TRÒN DONUT
   // Đường tròn bán kính r=50 -> Chu vi = 2 * pi * r = 314.16
@@ -586,14 +625,14 @@ export default function DashboardPage() {
                       key={order.id}
                       className="hover:bg-slate-50/50 transition-colors"
                     >
-                      <td className="px-6 py-4 font-semibold text-slate-900">
-                        {order.id}
+                      <td className="px-6 py-4 font-semibold text-slate-900 font-mono">
+                        {order.tracking_number || order.id.slice(0, 8)}
                       </td>
                       <td className="px-6 py-4 text-slate-700">
-                        {order.customer}
+                        {order.receiver_name || "—"}
                       </td>
-                      <td className="px-6 py-4 text-slate-600">
-                        {order.destination}
+                      <td className="px-6 py-4 text-slate-600 max-w-xs truncate">
+                        {order.receiver_address || "—"}
                       </td>
                       <td className="px-6 py-4 text-slate-600">
                         {order.weight}
@@ -621,13 +660,7 @@ export default function DashboardPage() {
                                     : "bg-emerald-500"
                             }`}
                           />
-                          {order.current_status === "PENDING"
-                            ? "Chờ xử lý"
-                            : order.current_status === "PICKED_UP"
-                              ? "Đã lấy"
-                              : order.current_status === "IN_TRANSIT"
-                                ? "Đang giao"
-                                : "Thành công"}
+                          {translateStatus(order.current_status || "PENDING")}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-right">
@@ -874,13 +907,13 @@ function CustomerDashboard({
               {recentOrders.map((ord: OrderData) => (
                 <tr key={ord.id} className="hover:bg-slate-50/40">
                   <td className="px-4 py-3 font-mono font-bold text-slate-900">
-                    {ord.id}
+                    {ord.tracking_number || ord.id.slice(0, 8)}
                   </td>
                   <td className="px-4 py-3 font-semibold text-slate-800">
-                    {ord.receiver_name || ord.receiver || "Unknown"}
+                    {ord.receiver_name || "—"}
                   </td>
                   <td className="px-4 py-3 text-slate-550 max-w-xs truncate">
-                    {ord.receiver_address || ord.address || "N/A"}
+                    {ord.receiver_address || "N/A"}
                   </td>
                   <td className="px-4 py-3 text-slate-600">{ord.weight} kg</td>
                   <td className="px-4 py-3 text-blue-600 font-bold">
@@ -891,15 +924,9 @@ function CustomerDashboard({
                   </td>
                   <td className="px-4 py-3">
                     <span
-                      className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                        ord.current_status === "PENDING"
-                          ? "bg-amber-50 text-amber-700 border border-amber-100"
-                          : "bg-red-50 text-red-700 border border-red-100"
-                      }`}
+                      className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${getStatusBadgeClass(ord.current_status || "")}`}
                     >
-                      {ord.current_status === "PENDING"
-                        ? "Chờ xử lý"
-                        : "Đã hủy"}
+                      {translateStatus(ord.current_status || "PENDING")}
                     </span>
                   </td>
                 </tr>

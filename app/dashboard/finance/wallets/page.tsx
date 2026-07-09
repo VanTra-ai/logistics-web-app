@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Wallet,
   Search,
@@ -9,14 +9,16 @@ import {
   X,
   CheckCircle,
   Clock,
+  Loader2,
+  AlertCircle,
 } from "lucide-react";
+import api from "@/lib/axios";
 
 type WalletData = {
   id: string;
-  shipperName: string;
   cod_debt: number;
   income_balance: number;
-  user?: { full_name: string };
+  user?: { id: string; full_name: string; email?: string };
   transactions?: Transaction[];
 };
 
@@ -28,41 +30,11 @@ type Transaction = {
   status: "SUCCESS" | "PENDING" | "FAILED";
 };
 
-const MOCK_WALLETS: WalletData[] = [
-  {
-    id: "W001",
-    shipperName: "Nguyễn Văn A",
-    cod_debt: 1500000,
-    income_balance: 500000,
-  },
-  {
-    id: "W002",
-    shipperName: "Trần Thị B",
-    cod_debt: 0,
-    income_balance: 1200000,
-  },
-  {
-    id: "W003",
-    shipperName: "Lê Văn C",
-    cod_debt: 3200000,
-    income_balance: 150000,
-  },
-  {
-    id: "W004",
-    shipperName: "Phạm Văn D",
-    cod_debt: 450000,
-    income_balance: 2000000,
-  },
-  {
-    id: "W005",
-    shipperName: "Hoàng Minh E",
-    cod_debt: 8000000,
-    income_balance: 50000,
-  },
-];
-
 export default function WalletsPage() {
-  const [wallets] = useState<WalletData[]>(MOCK_WALLETS);
+  const [wallets, setWallets] = useState<WalletData[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedWallet, setSelectedWallet] = useState<WalletData | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -74,9 +46,32 @@ export default function WalletsPage() {
     type: "success" | "error";
   } | null>(null);
 
-  const filteredWallets = wallets.filter((w) =>
-    w.shipperName.toLowerCase().includes(searchTerm.toLowerCase()),
-  );
+  // Fetch wallets from API on mount
+  useEffect(() => {
+    const fetchWallets = async () => {
+      setIsLoading(true);
+      setFetchError(null);
+      try {
+        const savedUser = localStorage.getItem("user");
+        const role = savedUser ? JSON.parse(savedUser).role : "";
+        const endpoint = role === "SHIPPER" ? "/wallets/me" : "/wallets";
+        const res = await api.get(endpoint);
+        const data = res.data?.data || res.data || [];
+        setWallets(Array.isArray(data) ? data : [data]);
+      } catch (err) {
+        console.error("Lỗi fetch ví:", err);
+        setFetchError("Không thể tải danh sách ví. Vui lòng thử lại.");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchWallets();
+  }, []);
+
+  const filteredWallets = wallets.filter((w) => {
+    const name = w.user?.full_name || "";
+    return name.toLowerCase().includes(searchTerm.toLowerCase());
+  });
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("vi-VN", {
@@ -96,7 +91,7 @@ export default function WalletsPage() {
     setSelectedWallet(null);
   };
 
-  const handleRemitSubmit = (e: React.FormEvent) => {
+  const handleRemitSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedWallet) return;
 
@@ -107,16 +102,28 @@ export default function WalletsPage() {
     }
 
     setIsSubmitting(true);
-
-    // MOCK API Call
-    setTimeout(() => {
-      setIsSubmitting(false);
+    try {
+      await api.post("/wallets/requests", {
+        walletId: selectedWallet.id,
+        amount,
+        type: "COD_DEPOSIT",
+        note: `Nộp COD ${formatCurrency(amount)}`,
+      });
       showToast(
-        `Đã xác nhận nộp COD ${formatCurrency(amount)} cho tài xế ${selectedWallet.user?.full_name || "Shipper"}`,
+        `Đã gửi yêu cầu nộp COD ${formatCurrency(amount)} cho tài xế ${selectedWallet.user?.full_name || "Shipper"}`,
         "success",
       );
       closeDrawer();
-    }, 1000);
+      // Re-fetch to refresh balances
+      const res = await api.get("/wallets");
+      const data = res.data?.data || res.data || [];
+      setWallets(Array.isArray(data) ? data : [data]);
+    } catch (err) {
+      console.error("Lỗi nộp COD:", err);
+      showToast("Có lỗi xảy ra. Vui lòng thử lại.", "error");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const showToast = (message: string, type: "success" | "error") => {
@@ -170,79 +177,96 @@ export default function WalletsPage() {
 
       {/* Data Table */}
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 text-sm">
-                <th className="px-6 py-4 font-medium">Tên Tài xế</th>
-                <th className="px-6 py-4 font-medium text-right">Dư nợ COD</th>
-                <th className="px-6 py-4 font-medium text-right">
-                  Số dư Thu nhập
-                </th>
-                <th className="px-6 py-4 font-medium text-center">Hành động</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filteredWallets.length > 0 ? (
-                filteredWallets.map((wallet) => (
-                  <tr
-                    key={wallet.id}
-                    className="hover:bg-slate-50/80 transition-colors cursor-pointer group"
-                    onClick={() => openDrawer(wallet)}
-                  >
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-semibold text-xs">
-                          {wallet.shipperName.charAt(0)}
+        {isLoading ? (
+          <div className="flex items-center justify-center py-16 gap-3 text-slate-500">
+            <Loader2 className="w-5 h-5 animate-spin" />
+            <span className="text-sm">Đang tải danh sách ví...</span>
+          </div>
+        ) : fetchError ? (
+          <div className="flex items-center justify-center py-16 gap-3 text-red-500">
+            <AlertCircle className="w-5 h-5" />
+            <span className="text-sm">{fetchError}</span>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 text-sm">
+                  <th className="px-6 py-4 font-medium">Tên Tài xế</th>
+                  <th className="px-6 py-4 font-medium text-right">
+                    Dư nợ COD
+                  </th>
+                  <th className="px-6 py-4 font-medium text-right">
+                    Số dư Thu nhập
+                  </th>
+                  <th className="px-6 py-4 font-medium text-center">
+                    Hành động
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredWallets.length > 0 ? (
+                  filteredWallets.map((wallet) => (
+                    <tr
+                      key={wallet.id}
+                      className="hover:bg-slate-50/80 transition-colors cursor-pointer group"
+                      onClick={() => openDrawer(wallet)}
+                    >
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-semibold text-xs">
+                            {(wallet.user?.full_name || "?").charAt(0)}
+                          </div>
+                          <div>
+                            <p className="font-medium text-slate-800 text-sm group-hover:text-blue-600 transition-colors">
+                              {wallet.user?.full_name || "Tài xế"}
+                            </p>
+                            <p className="text-xs text-slate-500">
+                              {wallet.user?.email ||
+                                `ID: ${wallet.id.slice(0, 8)}`}
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="font-medium text-slate-800 text-sm group-hover:text-blue-600 transition-colors">
-                            {wallet.shipperName}
-                          </p>
-                          <p className="text-xs text-slate-500">
-                            ID: {wallet.id}
-                          </p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <span
-                        className={`font-semibold ${wallet.cod_debt > 0 ? "text-red-600" : "text-slate-600"}`}
-                      >
-                        {formatCurrency(wallet.cod_debt)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <span className="font-semibold text-emerald-600">
-                        {formatCurrency(wallet.income_balance)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <button
-                        className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openDrawer(wallet);
-                        }}
-                      >
-                        <ArrowRightLeft className="w-4 h-4" />
-                      </button>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <span
+                          className={`font-semibold ${wallet.cod_debt > 0 ? "text-red-600" : "text-slate-600"}`}
+                        >
+                          {formatCurrency(wallet.cod_debt)}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <span className="font-semibold text-emerald-600">
+                          {formatCurrency(wallet.income_balance)}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <button
+                          className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openDrawer(wallet);
+                          }}
+                        >
+                          <ArrowRightLeft className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td
+                      colSpan={4}
+                      className="px-6 py-8 text-center text-slate-500"
+                    >
+                      Không tìm thấy tài xế nào
                     </td>
                   </tr>
-                ))
-              ) : (
-                <tr>
-                  <td
-                    colSpan={4}
-                    className="px-6 py-8 text-center text-slate-500"
-                  >
-                    Không tìm thấy tài xế nào
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Drawer */}

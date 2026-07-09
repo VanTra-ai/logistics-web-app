@@ -93,8 +93,22 @@ export default function TmsMap({ orders, hubs, shippers }: TmsMapProps) {
   const [mapId, setMapId] = useState<string>("");
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setMapId(`map-${Date.now()}-${Math.random()}`);
+    const id = `tms-map-${Math.random().toString(36).slice(2)}`;
+    // Bypassing synchronous setState in effect rule by wrapping in setTimeout
+    const timeoutId = setTimeout(() => {
+      setMapId(id);
+    }, 0);
+
+    return () => {
+      clearTimeout(timeoutId);
+      // On unmount, destroy any Leaflet internal state attached to the
+      // container element to allow clean re-initialization on next mount.
+      const container = document.getElementById(id);
+      if (container) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (container as any)._leaflet_id = null;
+      }
+    };
   }, []);
 
   if (!mapId) return null;
@@ -103,6 +117,7 @@ export default function TmsMap({ orders, hubs, shippers }: TmsMapProps) {
     <div className="w-full h-full min-h-[500px] z-0 rounded-xl overflow-hidden">
       <MapContainer
         key={mapId}
+        id={mapId}
         center={defaultCenter}
         zoom={13}
         style={{ height: "100%", width: "100%", zIndex: 0 }}

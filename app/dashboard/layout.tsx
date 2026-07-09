@@ -8,7 +8,6 @@ import {
   Package,
   Truck,
   Building2,
-  BarChart3,
   Settings,
   LogOut,
   Bell,
@@ -65,13 +64,43 @@ export default function DashboardLayout({
 
     const role = user.role?.toUpperCase() || "";
 
-    // 1. HUB_COORDINATOR (Điều phối viên trạm/bưu cục)
+    // 1. ADMIN — Quản trị tổng hệ thống
+    if (role === "ADMIN") {
+      return [
+        { name: "Tổng quan", href: "/dashboard", icon: LayoutDashboard },
+        { name: "Quản lý Đơn hàng", href: "/dashboard/orders", icon: Package },
+        { name: "Hệ thống Bưu cục", href: "/dashboard/hubs", icon: Building2 },
+        { name: "Quản lý Nhân sự", href: "/dashboard/users", icon: Users },
+        {
+          name: "Quản lý Sự cố",
+          href: "/dashboard/incidents",
+          icon: AlertTriangle,
+        },
+        {
+          name: "Ví / Đối soát",
+          href: "/dashboard/finance/wallets",
+          icon: Wallet,
+        },
+        {
+          name: "Nhật ký hệ thống",
+          href: "/dashboard/audit-logs",
+          icon: ClipboardList,
+        },
+      ];
+    }
+
+    // 2. HUB_COORDINATOR — Điều phối viên bưu cục
     if (role === "HUB_COORDINATOR") {
       return [
         {
           name: "Tổng quan Bưu cục",
           href: "/dashboard",
           icon: LayoutDashboard,
+        },
+        {
+          name: "Quản lý Đơn hàng",
+          href: "/dashboard/orders",
+          icon: Package,
         },
         { name: "Trạm xử lý đơn", href: "/dashboard/station", icon: ScanLine },
         {
@@ -81,78 +110,59 @@ export default function DashboardLayout({
         },
         { name: "TMS Dashboard", href: "/dashboard/tms", icon: MapPin },
         {
+          name: "Quản lý Sự cố",
+          href: "/dashboard/incidents",
+          icon: AlertTriangle,
+        },
+        {
           name: "Sự cố & Ngoại lệ",
           href: "/dashboard/exceptions",
           icon: AlertCircle,
         },
-        { name: "Vị trí Kệ hàng", href: "/dashboard/locations", icon: MapPin },
         {
-          name: "Vật tư Đóng gói",
-          href: "/dashboard/materials",
-          icon: Package,
+          name: "Vị trí Kệ hàng",
+          href: "/dashboard/locations",
+          icon: MapPin,
         },
         { name: "Kiểm kê Kho", href: "/dashboard/audits", icon: ClipboardList },
-        { name: "Cài đặt", href: "/dashboard/settings", icon: Settings },
       ];
     }
 
-    // 2. SHIPPER (Tài xế giao hàng)
+    // 3. SHIPPER — Tài xế giao hàng
     if (role === "SHIPPER") {
       return [
         { name: "Tổng quan", href: "/dashboard", icon: LayoutDashboard },
-        { name: "Đơn hàng của tôi", href: "/dashboard/orders", icon: Package },
+        {
+          name: "Đơn hàng của tôi",
+          href: "/dashboard/orders",
+          icon: Package,
+        },
         {
           name: "Ví của tôi",
           href: "/dashboard/finance/wallets",
           icon: Wallet,
         },
-        { name: "Cài đặt", href: "/dashboard/settings", icon: Settings },
       ];
     }
 
-    // 3. CUSTOMER (Chủ shop / Khách hàng)
+    // 4. CUSTOMER — Chủ shop / Khách hàng gửi hàng
     if (role === "CUSTOMER") {
       return [
-        { name: "Bảng điều khiển", href: "/dashboard", icon: LayoutDashboard },
-        { name: "Quản lý Đơn hàng", href: "/dashboard/orders", icon: Package },
         {
-          name: "Thống kê Đối soát",
-          href: "/dashboard/statistics",
-          icon: BarChart3,
+          name: "Bảng điều khiển",
+          href: "/dashboard",
+          icon: LayoutDashboard,
         },
-        { name: "Cài đặt", href: "/dashboard/settings", icon: Settings },
+        {
+          name: "Quản lý Đơn hàng",
+          href: "/dashboard/orders",
+          icon: Package,
+        },
       ];
     }
 
-    // 4. ADMIN (Quản trị viên) và các role chưa xác định (mặc định Admin full quyền)
-    return [
-      { name: "Tổng quan", href: "/dashboard", icon: LayoutDashboard },
-      { name: "Quản lý Đơn hàng", href: "/dashboard/orders", icon: Package },
-      { name: "Trạm xử lý đơn", href: "/dashboard/station", icon: ScanLine },
-      { name: "Điều phối Chuyến xe", href: "/dashboard/dispatch", icon: Truck },
-      { name: "Hệ thống Bưu cục", href: "/dashboard/hubs", icon: Building2 },
-      { name: "Quản lý Nhân sự", href: "/dashboard/users", icon: Users },
-      { name: "TMS Dashboard", href: "/dashboard/tms", icon: MapPin },
-      {
-        name: "Sự cố & Ngoại lệ",
-        href: "/dashboard/exceptions",
-        icon: AlertCircle,
-      },
-      { name: "Kiểm kê Kho", href: "/dashboard/audits", icon: ClipboardList },
-      { name: "Quản lý Vật tư", href: "/dashboard/materials", icon: Package },
-      { name: "Báo cáo SLA", href: "/dashboard/statistics", icon: BarChart3 },
-      {
-        name: "Quản lý Sự cố",
-        href: "/dashboard/incidents",
-        icon: AlertTriangle,
-      },
-      {
-        name: "Ví / Đối soát",
-        href: "/dashboard/finance/wallets",
-        icon: Wallet,
-      },
-      { name: "Cài đặt", href: "/dashboard/settings", icon: Settings },
-    ];
+    // Fallback: hiển thị tối thiểu cho các role chưa xác định
+    return [{ name: "Tổng quan", href: "/dashboard", icon: LayoutDashboard }];
   };
 
   const activeLinks = getSidebarLinks();
@@ -221,7 +231,9 @@ export default function DashboardLayout({
         if (isSubscribed && res.data?.data) {
           const fetchedNotifs = res.data.data;
           setNotifications(fetchedNotifs);
-          setUnreadCount(fetchedNotifs.filter((n: NotificationItem) => !n.isRead).length);
+          setUnreadCount(
+            fetchedNotifs.filter((n: NotificationItem) => !n.isRead).length,
+          );
         }
       } catch (error) {
         console.error("Lỗi lấy danh sách thông báo:", error);
