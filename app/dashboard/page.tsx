@@ -693,77 +693,50 @@ export default function DashboardPage() {
           </div>
 
           <div className="relative pl-6 space-y-6 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-150">
-            {/* Feed 1 */}
-            <div className="relative">
-              <span className="absolute -left-[22px] top-1.5 p-1 bg-amber-500 text-white rounded-full ring-4 ring-white">
-                <Clock className="w-3 h-3" />
-              </span>
-              <div>
-                <p className="text-sm font-semibold text-slate-800">
-                  Cảnh báo trễ chuyến xe
-                </p>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Chuyến xe #SHIP-298 đi Hải Phòng trễ 15 phút do thời tiết.
-                </p>
-                <span className="text-[10px] text-slate-400 mt-2 block font-medium">
-                  5 phút trước
-                </span>
-              </div>
-            </div>
-
-            {/* Feed 2 */}
-            <div className="relative">
-              <span className="absolute -left-[22px] top-1.5 p-1 bg-emerald-500 text-white rounded-full ring-4 ring-white">
-                <CheckCircle2 className="w-3 h-3" />
-              </span>
-              <div>
-                <p className="text-sm font-semibold text-slate-800">
-                  Giao hàng thành công
-                </p>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Shipper Nguyễn Hoàng Nam đã hoàn thành đơn hàng #ORD-9428.
-                </p>
-                <span className="text-[10px] text-slate-400 mt-2 block font-medium">
-                  20 phút trước
-                </span>
-              </div>
-            </div>
-
-            {/* Feed 3 */}
-            <div className="relative">
-              <span className="absolute -left-[22px] top-1.5 p-1 bg-blue-500 text-white rounded-full ring-4 ring-white">
-                <Truck className="w-3 h-3" />
-              </span>
-              <div>
-                <p className="text-sm font-semibold text-slate-800">
-                  Khởi hành chuyến xe
-                </p>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Tài xế Vũ Văn Bách đã xuất bến tuyến Cầu Giấy - Hà Đông.
-                </p>
-                <span className="text-[10px] text-slate-400 mt-2 block font-medium">
-                  45 phút trước
-                </span>
-              </div>
-              {/* Feed 4 */}
-              <div className="relative">
-                <span className="absolute -left-[22px] top-1.5 p-1 bg-red-500 text-white rounded-full ring-4 ring-white">
-                  <AlertTriangle className="w-3 h-3" />
-                </span>
-                <div>
-                  <p className="text-sm font-semibold text-slate-800">
-                    Báo lỗi sự cố
-                  </p>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Yêu cầu hỗ trợ kỹ thuật tại Bưu cục Hải Phòng: Hỏng máy quét
-                    mã vạch.
-                  </p>
-                  <span className="text-[10px] text-slate-400 mt-2 block font-medium">
-                    1 giờ trước
+            {recentOrders.length > 0 ? (
+              recentOrders.slice(0, 4).map((ord) => (
+                <div key={ord.id} className="relative">
+                  <span
+                    className={`absolute -left-[22px] top-1.5 p-1 text-white rounded-full ring-4 ring-white ${getStatusBgColor(ord.current_status || "PENDING")}`}
+                  >
+                    {ord.current_status === "FINISHED" ? (
+                      <CheckCircle2 className="w-3 h-3" />
+                    ) : ord.current_status === "IN_TRANSIT" ||
+                      ord.current_status === "DELIVERING" ? (
+                      <Truck className="w-3 h-3" />
+                    ) : ord.current_status === "CANCELLED" ? (
+                      <AlertTriangle className="w-3 h-3" />
+                    ) : (
+                      <Clock className="w-3 h-3" />
+                    )}
                   </span>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800">
+                      {translateStatus(ord.current_status || "PENDING")}
+                    </p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Đơn hàng #{ord.tracking_number || ord.id.slice(0, 8)} gửi
+                      tới {ord.receiver_address || "khách hàng"}.
+                    </p>
+                    <span className="text-[10px] text-slate-400 mt-2 block font-medium">
+                      {new Date(ord.created_at || new Date()).toLocaleString(
+                        "vi-VN",
+                        {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          day: "2-digit",
+                          month: "2-digit",
+                        },
+                      )}
+                    </span>
+                  </div>
                 </div>
-              </div>
-            </div>
+              ))
+            ) : (
+              <p className="text-xs text-slate-500 italic">
+                Chưa có hoạt động nào gần đây.
+              </p>
+            )}
           </div>
         </div>
       </div>

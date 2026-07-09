@@ -739,6 +739,14 @@ export default function OrdersManagementPage() {
 
   // Filter Logic
   const filteredOrders = orders.filter((o) => {
+    // 7. Security Data Visibility: HUB_COORDINATOR can only see their hub's orders
+    if (
+      currentUser?.role === "HUB_COORDINATOR" &&
+      o.pickup_hub?.id !== currentUser?.hub?.id
+    ) {
+      return false;
+    }
+
     const matchesSearch =
       o.tracking_number.toLowerCase().includes(orderSearch.toLowerCase()) ||
       o.sender_name.toLowerCase().includes(orderSearch.toLowerCase()) ||
@@ -785,15 +793,23 @@ export default function OrdersManagementPage() {
   const getStatusLabel = (status: string) => {
     switch (status) {
       case "PENDING":
-        return "Chờ xử lý";
+        return "Chờ lấy hàng";
+      case "ASSIGNED":
+        return "Đã gán tài xế";
+      case "PICKING":
+        return "Đang đi lấy";
       case "AT_HUB":
-        return "Đang lưu kho";
-      case "DELIVERING":
-        return "Đang giao khách";
+        return "Đã nhập kho";
       case "IN_TRANSIT":
         return "Đang trung chuyển";
+      case "DELIVERING":
+        return "Đang giao hàng";
       case "FINISHED":
-        return "Thành công";
+        return "Giao thành công";
+      case "FAILED":
+        return "Sự cố/Thất bại";
+      case "CANCELLED":
+        return "Đã hủy đơn";
       case "EXCEPTION":
         return "Lỗi sự cố";
       default:
@@ -1023,8 +1039,14 @@ export default function OrdersManagementPage() {
                         className="hover:bg-slate-50/50 transition-colors"
                       >
                         {/* Tracking number */}
-                        <td className="px-6 py-4 font-mono font-bold text-slate-900">
-                          {item.tracking_number}
+                        <td className="px-6 py-4">
+                          <span className="font-mono font-bold text-slate-900 block">
+                            {item.tracking_number}
+                          </span>
+                          <span className="text-[10px] text-slate-500 font-medium flex items-center gap-1 mt-1">
+                            <MapPin className="w-3 h-3 text-blue-500" />
+                            {item.pickup_hub?.name || "N/A"}
+                          </span>
                         </td>
 
                         {/* Sender */}
@@ -1202,27 +1224,25 @@ export default function OrdersManagementPage() {
                               <Printer className="w-4 h-4" />
                             </button>
                             {(item.current_status === "PENDING" ||
-                              item.current_status === "AT_HUB") && (
-                              <>
-                                <button
-                                  onClick={() => openEditOrderModal(item)}
-                                  className="p-1 hover:text-blue-600 cursor-pointer"
-                                  title="Chỉnh sửa đơn hàng"
-                                >
-                                  <Edit2 className="w-4 h-4" />
-                                </button>
-                                {item.current_status === "PENDING" &&
-                                  !item.shipment && (
-                                    <button
-                                      onClick={() => handleDeleteOrder(item.id)}
-                                      className="p-1 hover:text-red-650 cursor-pointer"
-                                      title="Xóa đơn hàng (soft delete)"
-                                    >
-                                      <Trash2 className="w-4 h-4" />
-                                    </button>
-                                  )}
-                              </>
-                            )}
+                              item.current_status === "AT_HUB") &&
+                              !item.shipment && (
+                                <>
+                                  <button
+                                    onClick={() => openEditOrderModal(item)}
+                                    className="p-1 hover:text-blue-600 cursor-pointer"
+                                    title="Chỉnh sửa đơn hàng"
+                                  >
+                                    <Edit2 className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteOrder(item.id)}
+                                    className="p-1 hover:text-red-650 cursor-pointer"
+                                    title="Xóa đơn hàng (soft delete)"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </>
+                              )}
                           </div>
                         </td>
                       </tr>
