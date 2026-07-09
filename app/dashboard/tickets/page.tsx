@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import api from "@/lib/axios";
+import Pagination from "@/components/Pagination";
 
 interface Ticket {
   id: string;
@@ -41,6 +42,11 @@ export default function TicketsPage() {
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [isLoading, setIsLoading] = useState(true);
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const itemsPerPage = 10;
+
   // Chat UI state
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [comments, setComments] = useState<TicketComment[]>([]);
@@ -54,7 +60,6 @@ export default function TicketsPage() {
   const fetchTickets = async (roleOverride?: string) => {
     setIsLoading(true);
     try {
-      // Nếu là CUSTOMER thì gọi /tickets/me, nếu ADMIN/HUB_COORDINATOR thì /tickets
       const userStr = localStorage.getItem("user");
       let role = roleOverride || "";
       if (!roleOverride && userStr) {
@@ -62,10 +67,27 @@ export default function TicketsPage() {
           role = JSON.parse(userStr).role;
         } catch {}
       }
+      
       const endpoint = role === "CUSTOMER" ? "/tickets/me" : "/tickets";
-      const res = await api.get(endpoint);
-      const data = res.data?.data || res.data || [];
-      setTickets(Array.isArray(data) ? data : []);
+      
+      const params = new URLSearchParams();
+      params.append("page", currentPage.toString());
+      params.append("limit", itemsPerPage.toString());
+      if (statusFilter !== "ALL") params.append("status", statusFilter);
+      if (searchTerm) params.append("search", searchTerm);
+
+      const res = await api.get(`${endpoint}?${params.toString()}`);
+      
+      if (res.data?.meta) {
+        setTickets(res.data.data);
+        setTotalPages(res.data.meta.totalPages);
+        setTotalItems(res.data.meta.totalItems);
+      } else {
+        const data = res.data?.data || res.data || [];
+        setTickets(Array.isArray(data) ? data : []);
+        setTotalPages(1);
+        setTotalItems(Array.isArray(data) ? data.length : 0);
+      }
     } catch (err) {
       console.warn("Lỗi fetch tickets", err);
     } finally {
@@ -74,18 +96,21 @@ export default function TicketsPage() {
   };
 
   useEffect(() => {
-    let role = "";
     const userStr = localStorage.getItem("user");
     if (userStr) {
       try {
         const parsed = JSON.parse(userStr);
-        role = parsed.role;
         // eslint-disable-next-line react-hooks/set-state-in-effect
         setCurrentUser(parsed);
       } catch {}
     }
-    fetchTickets(role);
   }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchTickets();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, statusFilter, searchTerm]);
 
   const fetchComments = async (ticketId: string) => {
     try {
@@ -166,17 +191,9 @@ export default function TicketsPage() {
     }
   };
 
-  const filteredTickets = tickets.filter((t) => {
-    const matchesSearch =
-      (t.order?.tracking_number || "")
-        .toLowerCase()
-        .includes(searchTerm.toLowerCase()) ||
-      (t.customer?.full_name || "")
-        .toLowerCase()
-        .includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === "ALL" || t.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  // Note: filtering by search term and status is now done on the backend.
+  // We keep filteredTickets = tickets for rendering.
+  const filteredTickets = tickets;
 
   return (
     <div className="flex h-[calc(100vh-100px)] gap-6 animate-fadeIn">
@@ -196,14 +213,20 @@ export default function TicketsPage() {
               placeholder="Tìm mã đơn hàng, khách hàng..."
               className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setCurrentPage(1);
+              }}
             />
           </div>
           <div className="flex gap-2 overflow-x-auto pb-1 hide-scrollbar">
             {["ALL", "OPEN", "RESOLVED", "CLOSED"].map((s) => (
               <button
                 key={s}
-                onClick={() => setStatusFilter(s)}
+                onClick={() => {
+                  setStatusFilter(s);
+                  setCurrentPage(1);
+                }}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${
                   statusFilter === s
                     ? "bg-blue-600 text-white shadow-sm shadow-blue-500/20"
@@ -260,6 +283,17 @@ export default function TicketsPage() {
             </div>
           )}
         </div>
+        {!isLoading && totalPages > 1 && (
+          <div className="p-4 border-t border-slate-200 flex justify-center bg-white z-10">
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalItems={totalItems}
+              itemsPerPage={itemsPerPage}
+              onPageChange={setCurrentPage}
+            />
+          </div>
+        )}
       </div>
 
       {/* Right Chat Area */}

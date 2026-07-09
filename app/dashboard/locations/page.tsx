@@ -12,6 +12,7 @@ import {
   Inbox,
 } from "lucide-react";
 import api from "@/lib/axios";
+import Pagination from "@/components/Pagination";
 
 interface Location {
   id: string;
@@ -39,6 +40,11 @@ export default function LocationsPage() {
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [searchQuery, setSearchQuery] = useState("");
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const itemsPerPage = 10;
+
   // Form State
   const [formData, setFormData] = useState({
     zone: "",
@@ -51,12 +57,26 @@ export default function LocationsPage() {
   const fetchLocations = useCallback(async () => {
     setIsLoading(true);
     try {
-      const params: Record<string, string> = {};
+      const params: Record<string, string> = {
+        page: currentPage.toString(),
+        limit: itemsPerPage.toString(),
+      };
       if (zoneFilter !== "ALL") params.zone = zoneFilter;
       if (statusFilter !== "ALL") params.status = statusFilter;
+      if (searchQuery) params.search = searchQuery;
 
       const response = await api.get("/locations", { params });
-      setLocations(response.data);
+      
+      if (response.data?.meta) {
+        setLocations(response.data.data);
+        setTotalPages(response.data.meta.totalPages);
+        setTotalItems(response.data.meta.totalItems);
+      } else {
+        const data = response.data?.data || response.data || [];
+        setLocations(Array.isArray(data) ? data : []);
+        setTotalPages(1);
+        setTotalItems(Array.isArray(data) ? data.length : 0);
+      }
     } catch (error) {
       console.error("Failed to fetch locations:", error);
       // Demo data
@@ -98,14 +118,14 @@ export default function LocationsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [zoneFilter, statusFilter]);
+  }, [zoneFilter, statusFilter, currentPage, searchQuery]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
       fetchLocations();
     }, 0);
     return () => clearTimeout(timer);
-  }, [fetchLocations]);
+  }, [fetchLocations, currentPage, zoneFilter, statusFilter, searchQuery]);
 
   const showNotification = (type: "success" | "error", message: string) => {
     setNotification({ type, message });
@@ -145,9 +165,8 @@ export default function LocationsPage() {
     }
   };
 
-  const filteredLocations = locations.filter((loc) =>
-    loc.barcode.toLowerCase().includes(searchQuery.toLowerCase()),
-  );
+  // We let backend handle the search filter for pagination
+  const filteredLocations = locations;
 
   const stats = {
     total: locations.length,
@@ -197,8 +216,8 @@ export default function LocationsPage() {
             <p className="text-2xl font-bold text-slate-900">{stats.total}</p>
           </div>
         </div>
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4 group hover:border-green-200 transition-colors">
-          <div className="p-3 bg-green-50 text-green-600 rounded-xl group-hover:bg-green-100 transition-colors">
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4 group hover:border-slate-300 transition-colors">
+          <div className="p-3 bg-slate-50 text-slate-600 rounded-xl group-hover:bg-slate-100 transition-colors">
             <BoxSelect className="w-6 h-6" />
           </div>
           <div>
@@ -206,8 +225,8 @@ export default function LocationsPage() {
             <p className="text-2xl font-bold text-slate-900">{stats.empty}</p>
           </div>
         </div>
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4 group hover:border-yellow-200 transition-colors">
-          <div className="p-3 bg-yellow-50 text-yellow-600 rounded-xl group-hover:bg-yellow-100 transition-colors">
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4 group hover:border-blue-200 transition-colors">
+          <div className="p-3 bg-blue-50 text-blue-600 rounded-xl group-hover:bg-blue-100 transition-colors">
             <Inbox className="w-6 h-6" />
           </div>
           <div>
@@ -236,7 +255,10 @@ export default function LocationsPage() {
           <div className="flex gap-3 w-full md:w-auto">
             <select
               value={zoneFilter}
-              onChange={(e) => setZoneFilter(e.target.value)}
+              onChange={(e) => {
+                setZoneFilter(e.target.value);
+                setCurrentPage(1);
+              }}
               className="px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="ALL">Khu vực (Tất cả)</option>
@@ -246,7 +268,10 @@ export default function LocationsPage() {
             </select>
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                setCurrentPage(1);
+              }}
               className="px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="ALL">Trạng thái (Tất cả)</option>
@@ -261,7 +286,10 @@ export default function LocationsPage() {
               type="text"
               placeholder="Tìm theo mã vạch..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setCurrentPage(1);
+              }}
               className="w-full pl-9 pr-4 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
             />
           </div>
@@ -328,9 +356,9 @@ export default function LocationsPage() {
                       <span
                         className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${
                           loc.status === "EMPTY"
-                            ? "bg-green-50 text-green-700 border-green-200"
+                            ? "bg-slate-50 text-slate-700 border-slate-200"
                             : loc.status === "OCCUPIED"
-                              ? "bg-yellow-50 text-yellow-700 border-yellow-200"
+                              ? "bg-blue-50 text-blue-700 border-blue-200"
                               : "bg-red-50 text-red-700 border-red-200"
                         }`}
                       >
@@ -360,6 +388,17 @@ export default function LocationsPage() {
             </tbody>
           </table>
         </div>
+        {!isLoading && totalPages > 1 && (
+          <div className="p-4 border-t border-slate-200 flex justify-center bg-white z-10">
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalItems={totalItems}
+              itemsPerPage={itemsPerPage}
+              onPageChange={setCurrentPage}
+            />
+          </div>
+        )}
       </div>
 
       {/* Add Modal */}

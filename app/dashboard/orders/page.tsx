@@ -26,6 +26,7 @@ import {
 import api from "@/lib/axios";
 import axios from "axios";
 import BulkUploadModal from "@/components/BulkUploadModal";
+import Pagination from "@/components/Pagination";
 
 interface Hub {
   id: string;
@@ -93,6 +94,12 @@ export default function OrdersManagementPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [shipments, setShipments] = useState<Shipment[]>([]);
   const [hubs, setHubs] = useState<Hub[]>([]);
+  
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const itemsPerPage = 10;
   const [shippers, setShippers] = useState<Shipper[]>([]);
   const [tariff, setTariff] = useState<{
     base_price_distance: number;
@@ -216,7 +223,7 @@ export default function OrdersManagementPage() {
       setNotification({ type: "success", message: res.data.message });
       setIsExcelImportModalOpen(false);
       setExcelImportFile(null);
-      await loadCoreData();
+      await loadCoreData(currentPage);
     } catch (err: unknown) {
       const apiError = err as {
         response?: { data?: { message?: string; errors?: string[] } };
@@ -261,7 +268,7 @@ export default function OrdersManagementPage() {
   };
 
   // Load core data
-  const loadCoreData = async (showSpinner = false) => {
+  const loadCoreData = async (page = 1, showSpinner = false) => {
     if (!showSpinner) setIsLoading(true);
     setNotification(null);
 
@@ -297,9 +304,15 @@ export default function OrdersManagementPage() {
       }
 
       // 3. Fetch Orders
-      const ordersRes = await api.get("/orders");
+      const ordersRes = await api.get(`/orders?page=${page}&limit=${itemsPerPage}`);
       const ordersList = ordersRes.data?.data || ordersRes.data || [];
       if (Array.isArray(ordersList)) setOrders(ordersList);
+      
+      const meta = ordersRes.data?.meta;
+      if (meta) {
+        setTotalPages(meta.totalPages);
+        setTotalItems(meta.totalItems);
+      }
 
       // 4. Fetch Shipments
       // Fetch shipments of current hub if coordinator, otherwise fetch first hub / all
@@ -339,11 +352,8 @@ export default function OrdersManagementPage() {
   };
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      loadCoreData();
-    }, 0);
-    return () => clearTimeout(timer);
-  }, []);
+    loadCoreData(currentPage);
+  }, [currentPage]);
 
   useEffect(() => {
     if (notification) {
@@ -445,7 +455,7 @@ export default function OrdersManagementPage() {
           message: "Tạo đơn hàng thành công!",
         });
       }
-      await loadCoreData();
+      await loadCoreData(currentPage);
       setIsOrderModalOpen(false);
     } catch (err: unknown) {
       const apiError = err as { response?: { data?: { message?: string } } };
@@ -512,7 +522,7 @@ export default function OrdersManagementPage() {
     try {
       await api.delete(`/orders/${orderId}`);
       setNotification({ type: "success", message: "Xóa đơn hàng thành công!" });
-      await loadCoreData();
+      await loadCoreData(currentPage);
     } catch (err: unknown) {
       const apiError = err as { response?: { data?: { message?: string } } };
       setNotification({
@@ -530,7 +540,7 @@ export default function OrdersManagementPage() {
         type: "success",
         message: `Đã nhập kho bưu cục vận đơn ${trackingNum}!`,
       });
-      await loadCoreData();
+      await loadCoreData(currentPage);
     } catch (err: unknown) {
       const apiError = err as { response?: { data?: { message?: string } } };
       setNotification({
@@ -549,7 +559,7 @@ export default function OrdersManagementPage() {
         type: "success",
         message: "Đã cập nhật lệnh giao lại thành công!",
       });
-      await loadCoreData();
+      await loadCoreData(currentPage);
     } catch (err: unknown) {
       const apiError = err as { response?: { data?: { message?: string } } };
       setNotification({
@@ -568,7 +578,7 @@ export default function OrdersManagementPage() {
         type: "success",
         message: "Đã chốt hoàn trả đơn về cho người gửi!",
       });
-      await loadCoreData();
+      await loadCoreData(currentPage);
     } catch (err: unknown) {
       const apiError = err as { response?: { data?: { message?: string } } };
       setNotification({
@@ -585,7 +595,7 @@ export default function OrdersManagementPage() {
         type: "success",
         message: "Đối soát nộp quỹ COD thành công!",
       });
-      await loadCoreData();
+      await loadCoreData(currentPage);
     } catch (err: unknown) {
       const apiError = err as { response?: { data?: { message?: string } } };
       setNotification({
@@ -627,7 +637,7 @@ export default function OrdersManagementPage() {
         type: "success",
         message: "Gom nhóm và xếp các đơn hàng lên xe thành công!",
       });
-      await loadCoreData();
+      await loadCoreData(currentPage);
       setIsAssignShipmentOpen(false);
     } catch (err: unknown) {
       const apiError = err as { response?: { data?: { message?: string } } };
@@ -650,7 +660,7 @@ export default function OrdersManagementPage() {
       });
       setNotification({ type: "success", message: "Gán Shipper thành công!" });
       setIsAssignShipperModalOpen(false);
-      await loadCoreData();
+      await loadCoreData(currentPage);
     } catch (err: unknown) {
       const apiError = err as { response?: { data?: { message?: string } } };
       setNotification({
@@ -701,7 +711,7 @@ export default function OrdersManagementPage() {
           message: "Tạo chuyến xe gom nhóm mới thành công!",
         });
       }
-      await loadCoreData();
+      await loadCoreData(currentPage);
       setIsShipmentModalOpen(false);
     } catch (err: unknown) {
       const apiError = err as { response?: { data?: { message?: string } } };
@@ -750,7 +760,7 @@ export default function OrdersManagementPage() {
         type: "success",
         message: "Xóa chuyến xe gom nhóm thành công!",
       });
-      await loadCoreData();
+      await loadCoreData(currentPage);
     } catch (err: unknown) {
       const apiError = err as { response?: { data?: { message?: string } } };
       setNotification({
@@ -958,6 +968,46 @@ export default function OrdersManagementPage() {
       {/* TAB 1: ORDERS */}
       {activeTab === "ORDERS" && (
         <div className="space-y-4">
+          {/* Status Legend & Quick Filters */}
+          <div className="bg-white p-3 md:p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap gap-2 text-xs items-center">
+            <span className="font-bold text-slate-700 mr-2 flex items-center">
+              Chú thích & Lọc nhanh:
+            </span>
+            {[
+              { status: "PENDING", label: "Chờ lấy", icon: "🔵", desc: "Đơn mới tạo" },
+              { status: "PICKING", label: "Đang đi lấy", icon: "🟠", desc: "Shipper đang di chuyển tới khách gửi" },
+              { status: "AT_HUB", label: "Lưu kho bãi", icon: "🔵", desc: "Hàng đã nhập kho, chờ gom chuyến" },
+              { status: "IN_TRANSIT", label: "Đã lên tải", icon: "🟣", desc: "Hàng đã vào bao/xe tải, chờ xuất bến" },
+              { status: "DELIVERING", label: "Đang giao khách", icon: "🚚", desc: "Shipper đang trên đường giao" },
+              { status: "FINISHED", label: "Giao thành công", icon: "✅", desc: "Hoàn tất đơn hàng" },
+              { status: "FAILED", label: "Sự cố", icon: "🔴", desc: "Giao thất bại, chờ xử lý" },
+            ].map((l) => (
+              <button
+                key={l.status}
+                onClick={() => setOrderStatusFilter(l.status)}
+                title={l.desc}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border transition-all ${
+                  orderStatusFilter === l.status
+                    ? "bg-blue-50 border-blue-200 text-blue-700 font-semibold"
+                    : "bg-white border-slate-200 hover:bg-slate-50 text-slate-600"
+                }`}
+              >
+                <span>{l.icon}</span>
+                <span>{l.label}</span>
+              </button>
+            ))}
+            <button
+              onClick={() => setOrderStatusFilter("ALL")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border transition-all ${
+                orderStatusFilter === "ALL"
+                  ? "bg-blue-50 border-blue-200 text-blue-700 font-semibold"
+                  : "bg-white border-slate-200 hover:bg-slate-50 text-slate-600"
+              }`}
+            >
+              <span>Tất cả</span>
+            </button>
+          </div>
+
           {/* Order Filters */}
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between">
             <div className="relative w-full md:max-w-md">
@@ -1048,7 +1098,8 @@ export default function OrdersManagementPage() {
                 </p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <>
+                <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="border-b border-slate-150 bg-slate-50/50 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
@@ -1283,6 +1334,14 @@ export default function OrdersManagementPage() {
                   </tbody>
                 </table>
               </div>
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                totalItems={totalItems}
+                itemsPerPage={itemsPerPage}
+                onPageChange={setCurrentPage}
+              />
+              </>
             )}
           </div>
         </div>
@@ -2332,7 +2391,7 @@ export default function OrdersManagementPage() {
         isOpen={isBulkUploadModalOpen}
         onClose={() => setIsBulkUploadModalOpen(false)}
         onSuccess={() => {
-          loadCoreData();
+          loadCoreData(currentPage);
         }}
       />
     </div>

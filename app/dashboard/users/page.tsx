@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import api from "@/lib/axios";
 import axios from "axios";
+import Pagination from "@/components/Pagination";
 
 interface Hub {
   id: string;
@@ -47,6 +48,12 @@ export default function UsersManagementPage() {
   const [roleFilter, setRoleFilter] = useState<string>("ALL");
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const itemsPerPage = 10;
 
   // Modals & Notifications
   const [notification, setNotification] = useState<{
@@ -88,18 +95,26 @@ export default function UsersManagementPage() {
     }
   };
 
-  const fetchUsers = async (showRefreshIndicator = false) => {
+  const fetchUsers = async (page = 1, showRefreshIndicator = false) => {
     if (showRefreshIndicator) setIsRefreshing(true);
     else setIsLoading(true);
     setNotification(null);
 
     try {
-      const response = await api.get("/users");
+      const response = await api.get(
+        `/users?page=${page}&limit=${itemsPerPage}`,
+      );
       const data = response.data?.data || response.data || [];
       if (Array.isArray(data)) {
         setUsers(data);
       } else {
         throw new Error("Dữ liệu nhân viên trả về không đúng định dạng");
+      }
+
+      const meta = response.data?.meta;
+      if (meta) {
+        setTotalPages(meta.totalPages);
+        setTotalItems(meta.totalItems);
       }
     } catch (error) {
       console.warn("Không tải được danh sách nhân viên từ backend.", error);
@@ -117,8 +132,12 @@ export default function UsersManagementPage() {
   };
 
   useEffect(() => {
+    const timer = setTimeout(() => fetchUsers(currentPage), 0);
+    return () => clearTimeout(timer);
+  }, [currentPage]);
+
+  useEffect(() => {
     const timer = setTimeout(() => {
-      fetchUsers();
       fetchHubsList();
     }, 0);
     return () => clearTimeout(timer);
@@ -215,7 +234,7 @@ export default function UsersManagementPage() {
       const createdUser = response.data?.data || response.data;
       if (createdUser) {
         // Tải lại danh sách để đồng bộ quan hệ bưu cục
-        await fetchUsers();
+        await fetchUsers(currentPage);
         setIsAddModalOpen(false);
         setNotification({
           type: "success",
@@ -268,7 +287,7 @@ export default function UsersManagementPage() {
       const response = await api.patch(`/users/${selectedUser.id}`, payload);
       const updated = response.data?.data || response.data;
       if (updated) {
-        await fetchUsers();
+        await fetchUsers(currentPage);
         setIsEditModalOpen(false);
         setNotification({
           type: "success",
@@ -424,7 +443,7 @@ export default function UsersManagementPage() {
         </div>
         <div className="flex gap-2">
           <button
-            onClick={() => fetchUsers(true)}
+            onClick={() => fetchUsers(currentPage, true)}
             disabled={isRefreshing}
             className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl border border-slate-250 transition-colors cursor-pointer disabled:opacity-50"
             title="Làm mới danh sách"
@@ -479,7 +498,7 @@ export default function UsersManagementPage() {
           <div className="bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm flex items-center gap-2">
             <span className="text-slate-500">Tổng số:</span>
             <span className="text-slate-800 font-bold text-sm">
-              {users.length}
+              {totalItems}
             </span>
           </div>
           <div className="bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm flex items-center gap-2">
@@ -647,6 +666,15 @@ export default function UsersManagementPage() {
               </tbody>
             </table>
           </div>
+        )}
+        {!isLoading && filteredUsers.length > 0 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={totalItems}
+            itemsPerPage={itemsPerPage}
+            onPageChange={setCurrentPage}
+          />
         )}
       </div>
 

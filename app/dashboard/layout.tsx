@@ -21,6 +21,7 @@ import {
   ClipboardList,
   AlertTriangle,
   Wallet,
+  DollarSign,
 } from "lucide-react";
 import api from "@/lib/axios";
 import { io } from "socket.io-client";
@@ -85,6 +86,11 @@ export default function DashboardLayout({
           name: "Ví / Đối soát",
           href: "/dashboard/finance/wallets",
           icon: Wallet,
+        },
+        {
+          name: "Tài chính & Biểu phí",
+          href: "/dashboard/finance",
+          icon: DollarSign,
         },
         {
           name: "Nhật ký hệ thống",

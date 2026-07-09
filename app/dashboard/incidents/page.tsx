@@ -15,48 +15,28 @@ import {
   Image as ImageIcon,
 } from "lucide-react";
 
-// Mock data
-type IncidentStatus = "PENDING" | "RESOLVED" | "REJECTED";
+import { useEffect } from "react";
+import api from "@/lib/axios";
+import Pagination from "@/components/Pagination";
+
+// Mock data replaced with real API
+type IncidentStatus =
+  | "PENDING"
+  | "RESOLVED_REDELIVERY"
+  | "RESOLVED_RETURN"
+  | "RESOLVED_COMPENSATION"
+  | "REJECTED";
 
 interface Incident {
   id: string;
-  time: string;
-  orderCode: string;
-  shipperName: string;
+  created_at: string;
+  order: { tracking_number: string };
+  shipper?: { full_name: string };
   reason: string;
-  imageUrl: string;
+  description: string;
+  proof_image_url: string;
   status: IncidentStatus;
 }
-
-const mockIncidents: Incident[] = [
-  {
-    id: "INC-001",
-    time: "2026-07-08 10:30",
-    orderCode: "ORD-982374",
-    shipperName: "Nguyễn Văn A",
-    reason: "Khách hàng không nghe máy (Gọi 3 lần)",
-    imageUrl: "https://via.placeholder.com/150",
-    status: "PENDING",
-  },
-  {
-    id: "INC-002",
-    time: "2026-07-08 09:15",
-    orderCode: "ORD-982375",
-    shipperName: "Trần Thị B",
-    reason: "Hàng bị móp méo trong quá trình vận chuyển",
-    imageUrl: "https://via.placeholder.com/150",
-    status: "PENDING",
-  },
-  {
-    id: "INC-003",
-    time: "2026-07-07 16:45",
-    orderCode: "ORD-982376",
-    shipperName: "Lê Văn C",
-    reason: "Sai địa chỉ giao hàng",
-    imageUrl: "https://via.placeholder.com/150",
-    status: "PENDING",
-  },
-];
 
 export default function IncidentsPage() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -65,12 +45,51 @@ export default function IncidentsPage() {
   );
   const [resolutionNotes, setResolutionNotes] = useState("");
 
+  const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const itemsPerPage = 10;
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchIncidents = async () => {
+      setIsLoading(true);
+      try {
+        const res = await api.get(
+          `/incidents?type=DELIVERY&page=${currentPage}&limit=${itemsPerPage}`
+        );
+        if (!isMounted) return;
+        if (res.data?.meta) {
+          setIncidents(res.data.data);
+          setTotalPages(res.data.meta.totalPages);
+          setTotalItems(res.data.meta.totalItems);
+        } else {
+          // Fallback if no meta
+          const data = res.data?.data || res.data || [];
+          setIncidents(Array.isArray(data) ? data : [data]);
+          setTotalPages(1);
+          setTotalItems(Array.isArray(data) ? data.length : 1);
+        }
+      } catch (err) {
+        console.error("Failed to fetch incidents", err);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    };
+    fetchIncidents();
+    return () => {
+      isMounted = false;
+    };
+  }, [currentPage]);
+
   const handleAction = (actionType: string) => {
     if (!selectedIncident) return;
     console.log(
       `Action: ${actionType} on incident ${selectedIncident.id} with notes: ${resolutionNotes}`,
     );
-    // Handle action here...
+    // Real implementation would call API /incidents/:id/resolve
     setSelectedIncident(null);
     setResolutionNotes("");
   };
@@ -126,7 +145,14 @@ export default function IncidentsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm">
-              {mockIncidents.map((incident) => (
+              {isLoading ? (
+                <tr>
+                  <td colSpan={7} className="py-8 text-center text-slate-500">
+                    Đang tải dữ liệu...
+                  </td>
+                </tr>
+              ) : incidents.length > 0 ? (
+                incidents.map((incident) => (
                 <tr
                   key={incident.id}
                   className="hover:bg-slate-50 transition-colors group cursor-pointer"
@@ -135,19 +161,19 @@ export default function IncidentsPage() {
                   <td className="py-4 px-6">
                     <div className="flex items-center gap-2 text-slate-600">
                       <Calendar className="w-4 h-4 text-slate-400" />
-                      {incident.time}
+                      {new Date(incident.created_at).toLocaleString("vi-VN")}
                     </div>
                   </td>
                   <td className="py-4 px-6">
                     <div className="flex items-center gap-2 font-medium text-slate-900">
                       <Package className="w-4 h-4 text-blue-500" />
-                      {incident.orderCode}
+                      {incident.order?.tracking_number || "N/A"}
                     </div>
                   </td>
                   <td className="py-4 px-6">
                     <div className="flex items-center gap-2 text-slate-700">
                       <User className="w-4 h-4 text-slate-400" />
-                      {incident.shipperName}
+                      {incident.shipper?.full_name || "N/A"}
                     </div>
                   </td>
                   <td className="py-4 px-6">
@@ -156,19 +182,39 @@ export default function IncidentsPage() {
                     </span>
                   </td>
                   <td className="py-4 px-6">
-                    <div className="w-10 h-10 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center overflow-hidden">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={incident.imageUrl}
-                        alt="Hình ảnh sự cố"
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
+                    {incident.proof_image_url ? (
+                      <div className="w-10 h-10 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center overflow-hidden">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={
+                            incident.proof_image_url.startsWith("http")
+                              ? incident.proof_image_url
+                              : `${process.env.NEXT_PUBLIC_API_URL}${incident.proof_image_url}`
+                          }
+                          alt="Hình ảnh sự cố"
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    ) : (
+                      <span className="text-xs text-slate-400">Không có ảnh</span>
+                    )}
                   </td>
                   <td className="py-4 px-6">
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                    <span
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${
+                        incident.status === "PENDING"
+                          ? "bg-amber-50 text-amber-700 border-amber-200"
+                          : incident.status === "REJECTED"
+                          ? "bg-red-50 text-red-700 border-red-200"
+                          : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                      }`}
+                    >
                       <AlertCircle className="w-3.5 h-3.5" />
-                      Chờ xử lý
+                      {incident.status === "PENDING"
+                        ? "Chờ xử lý"
+                        : incident.status === "REJECTED"
+                        ? "Từ chối"
+                        : "Đã giải quyết"}
                     </span>
                   </td>
                   <td className="py-4 px-6 text-right">
@@ -183,8 +229,9 @@ export default function IncidentsPage() {
                     </button>
                   </td>
                 </tr>
-              ))}
-              {mockIncidents.length === 0 && (
+              ))
+              ) : null}
+              {!isLoading && incidents.length === 0 && (
                 <tr>
                   <td colSpan={7} className="py-8 text-center text-slate-500">
                     Không tìm thấy sự cố nào.
@@ -194,6 +241,17 @@ export default function IncidentsPage() {
             </tbody>
           </table>
         </div>
+        {!isLoading && totalPages > 1 && (
+          <div className="p-4 border-t border-slate-200">
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalItems={totalItems}
+              itemsPerPage={itemsPerPage}
+              onPageChange={setCurrentPage}
+            />
+          </div>
+        )}
       </div>
 
       {/* Modal / Drawer for Details */}
@@ -237,21 +295,23 @@ export default function IncidentsPage() {
                           Mã đơn hàng
                         </span>
                         <span className="font-semibold text-slate-800">
-                          {selectedIncident.orderCode}
+                          {selectedIncident.order?.tracking_number}
                         </span>
                       </div>
                       <div className="flex justify-between items-center py-2 border-b border-slate-100">
                         <span className="text-slate-500 text-sm">Shipper</span>
                         <span className="font-medium text-slate-800">
-                          {selectedIncident.shipperName}
+                          {selectedIncident.shipper?.full_name}
                         </span>
                       </div>
                       <div className="flex justify-between items-center py-2 border-b border-slate-100">
                         <span className="text-slate-500 text-sm">
-                          Thời gian
+                          Thời gian báo cáo
                         </span>
-                        <span className="text-slate-700">
-                          {selectedIncident.time}
+                        <span className="text-slate-800">
+                          {new Date(selectedIncident.created_at).toLocaleString(
+                            "vi-VN",
+                          )}
                         </span>
                       </div>
                     </div>
@@ -270,21 +330,27 @@ export default function IncidentsPage() {
                 {/* Evidence Image */}
                 <div>
                   <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 block">
-                    Hình ảnh xác thực
+                    Hình ảnh đính kèm
                   </label>
-                  <div className="rounded-xl overflow-hidden border border-slate-200 bg-slate-50 aspect-video flex items-center justify-center group relative">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={selectedIncident.imageUrl}
-                      alt="Xác thực"
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
-                      <button className="bg-white/90 backdrop-blur text-slate-800 p-2 rounded-lg shadow-sm font-medium text-sm flex items-center gap-2">
-                        <ImageIcon className="w-4 h-4" /> Xem ảnh lớn
-                      </button>
+                  {selectedIncident.proof_image_url ? (
+                    <div className="rounded-xl border border-slate-200 overflow-hidden bg-slate-50 aspect-video flex items-center justify-center">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={
+                          selectedIncident.proof_image_url.startsWith("http")
+                            ? selectedIncident.proof_image_url
+                            : `${process.env.NEXT_PUBLIC_API_URL}${selectedIncident.proof_image_url}`
+                        }
+                        alt="Minh chứng"
+                        className="w-full h-full object-contain"
+                      />
                     </div>
-                  </div>
+                  ) : (
+                    <div className="rounded-xl border border-slate-200 overflow-hidden bg-slate-50 aspect-video flex flex-col items-center justify-center text-slate-400">
+                      <ImageIcon className="w-10 h-10 mb-2 opacity-50" />
+                      <span className="text-sm">Không có hình ảnh</span>
+                    </div>
+                  )}
                 </div>
               </div>
 

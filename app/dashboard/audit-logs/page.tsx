@@ -1,41 +1,21 @@
 "use client";
 
-import { useState } from "react";
-import { X, ArrowRight, Eye } from "lucide-react";
+import { useState, useEffect } from "react";
+import { X, ArrowRight, Eye, RefreshCw } from "lucide-react";
+import api from "@/lib/axios";
+import Pagination from "@/components/Pagination";
 
-// Mock Data
-const mockAuditLogs = [
-  {
-    id: "1",
-    action: "UPDATE",
-    entityName: "Order",
-    entityId: "ORD-123",
-    oldValues: { status: "PENDING", weight: 2.5 },
-    newValues: { status: "DISPATCHED", weight: 2.5 },
-    userId: "U-1",
-    createdAt: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
-  },
-  {
-    id: "2",
-    action: "CREATE",
-    entityName: "Hub",
-    entityId: "HUB-HN-01",
-    oldValues: null,
-    newValues: { name: "Hà Nội Main Hub", capacity: 5000, isActive: true },
-    userId: "U-2",
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
-  },
-  {
-    id: "3",
-    action: "DELETE",
-    entityName: "User",
-    entityId: "U-999",
-    oldValues: { role: "SHIPPER", isActive: false },
-    newValues: null,
-    userId: "U-1",
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
-  },
-];
+// Interface
+interface AuditLog {
+  id: string;
+  action: string;
+  entityName: string;
+  entityId: string;
+  oldValues: Record<string, unknown> | null;
+  newValues: Record<string, unknown> | null;
+  userId: string;
+  createdAt: string;
+}
 
 // Helper to render Action Badges
 const ActionBadge = ({ action }: { action: string }) => {
@@ -75,7 +55,7 @@ const DiffViewerModal = ({
 }: {
   isOpen: boolean;
   onClose: () => void;
-  log: (typeof mockAuditLogs)[0] | null;
+  log: AuditLog | null;
 }) => {
   if (!isOpen || !log) return null;
 
@@ -155,12 +135,47 @@ const DiffViewerModal = ({
 };
 
 export default function AuditLogsPage() {
-  const [selectedLog, setSelectedLog] = useState<
-    (typeof mockAuditLogs)[0] | null
-  >(null);
+  const [logs, setLogs] = useState<AuditLog[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const handleViewDiff = (log: (typeof mockAuditLogs)[0]) => {
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const itemsPerPage = 10;
+
+  const fetchLogs = async (page = 1, isRefresh = false) => {
+    if (isRefresh) setIsRefreshing(true);
+    else setIsLoading(true);
+    try {
+      const res = await api.get(
+        `/audit-logs?page=${page}&limit=${itemsPerPage}`,
+      );
+      const data = res.data?.data || res.data || [];
+      if (Array.isArray(data)) setLogs(data);
+
+      const meta = res.data?.meta;
+      if (meta) {
+        setTotalPages(meta.totalPages);
+        setTotalItems(meta.totalItems);
+      }
+    } catch (error) {
+      console.warn("Failed to fetch audit logs", error);
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(() => fetchLogs(currentPage), 0);
+    return () => clearTimeout(timer);
+  }, [currentPage]);
+
+  const handleViewDiff = (log: AuditLog) => {
     setSelectedLog(log);
     setIsModalOpen(true);
   };
@@ -181,6 +196,22 @@ export default function AuditLogsPage() {
             Theo dõi mọi thay đổi dữ liệu trong hệ thống (Audit Logs)
           </p>
         </div>
+        <div className="flex items-center gap-4">
+          <div className="text-sm text-slate-500 font-medium">
+            Tổng số:{" "}
+            <span className="font-bold text-slate-800">{totalItems}</span>
+          </div>
+          <button
+            onClick={() => fetchLogs(currentPage, true)}
+            disabled={isRefreshing}
+            className="p-2 bg-white text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+            title="Làm mới"
+          >
+            <RefreshCw
+              className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`}
+            />
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
@@ -197,44 +228,18 @@ export default function AuditLogsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-slate-700">
-              {mockAuditLogs.map((log) => (
-                <tr
-                  key={log.id}
-                  className="hover:bg-slate-50/80 transition-colors"
-                >
-                  <td className="px-6 py-4">
-                    {new Date(log.createdAt).toLocaleString("vi-VN", {
-                      day: "2-digit",
-                      month: "2-digit",
-                      year: "numeric",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </td>
-                  <td className="px-6 py-4 font-medium">{log.userId}</td>
-                  <td className="px-6 py-4">
-                    <ActionBadge action={log.action} />
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className="font-mono text-xs px-2 py-1 bg-slate-100 rounded text-slate-600">
-                      {log.entityName}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 font-mono text-xs">
-                    {log.entityId}
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <button
-                      onClick={() => handleViewDiff(log)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 font-medium rounded-lg transition-colors text-xs cursor-pointer"
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                      Xem Diff
-                    </button>
+              {isLoading ? (
+                <tr>
+                  <td colSpan={6} className="px-6 py-12 text-center">
+                    <div className="flex flex-col items-center justify-center gap-3">
+                      <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                      <span className="text-slate-500 text-sm">
+                        Đang tải nhật ký...
+                      </span>
+                    </div>
                   </td>
                 </tr>
-              ))}
-              {mockAuditLogs.length === 0 && (
+              ) : logs.length === 0 ? (
                 <tr>
                   <td
                     colSpan={6}
@@ -243,10 +248,57 @@ export default function AuditLogsPage() {
                     Không có nhật ký nào.
                   </td>
                 </tr>
+              ) : (
+                logs.map((log) => (
+                  <tr
+                    key={log.id}
+                    className="hover:bg-slate-50/80 transition-colors"
+                  >
+                    <td className="px-6 py-4">
+                      {new Date(log.createdAt).toLocaleString("vi-VN", {
+                        day: "2-digit",
+                        month: "2-digit",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </td>
+                    <td className="px-6 py-4 font-medium">{log.userId}</td>
+                    <td className="px-6 py-4">
+                      <ActionBadge action={log.action} />
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="font-mono text-xs px-2 py-1 bg-slate-100 rounded text-slate-600">
+                        {log.entityName}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 font-mono text-xs">
+                      {log.entityId}
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <button
+                        onClick={() => handleViewDiff(log)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 font-medium rounded-lg transition-colors text-xs cursor-pointer"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        Xem Diff
+                      </button>
+                    </td>
+                  </tr>
+                ))
               )}
             </tbody>
           </table>
         </div>
+        {!isLoading && logs.length > 0 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={totalItems}
+            itemsPerPage={itemsPerPage}
+            onPageChange={setCurrentPage}
+          />
+        )}
       </div>
 
       <DiffViewerModal

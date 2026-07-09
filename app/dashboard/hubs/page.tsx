@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import api from "@/lib/axios";
 import axios from "axios";
+import Pagination from "@/components/Pagination";
 
 interface Hub {
   id: string;
@@ -34,6 +35,12 @@ export default function HubsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const itemsPerPage = 10;
 
   // Trạng thái thông báo chung
   const [notification, setNotification] = useState<{
@@ -56,20 +63,27 @@ export default function HubsPage() {
   const [formError, setFormError] = useState("");
 
   // Gọi danh sách bưu cục khi khởi chạy
-  const fetchHubs = async (showRefreshIndicator = false) => {
+  const fetchHubs = async (page = 1, showRefreshIndicator = false) => {
     if (showRefreshIndicator) setIsRefreshing(true);
     else setIsLoading(true);
     setNotification(null);
 
     try {
-      const response = await api.get("/hubs");
-      // Dữ liệu thường có dạng { message: string, data: Hub[] } hoặc trực tiếp mảng Hub[]
+      const response = await api.get(
+        `/hubs?page=${page}&limit=${itemsPerPage}`,
+      );
       const data = response.data?.data || response.data || [];
 
       if (Array.isArray(data)) {
         setHubs(data);
       } else {
         throw new Error("Dữ liệu bưu cục trả về không đúng định dạng");
+      }
+
+      const meta = response.data?.meta;
+      if (meta) {
+        setTotalPages(meta.totalPages);
+        setTotalItems(meta.totalItems);
       }
     } catch (error) {
       console.warn("Không thể tải danh sách bưu cục từ server.", error);
@@ -87,11 +101,9 @@ export default function HubsPage() {
   };
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      fetchHubs();
-    }, 0);
+    const timer = setTimeout(() => fetchHubs(currentPage), 0);
     return () => clearTimeout(timer);
-  }, []);
+  }, [currentPage]);
 
   // Xử lý ẩn thông báo sau 5 giây
   useEffect(() => {
@@ -146,7 +158,7 @@ export default function HubsPage() {
 
       const createdHub = response.data?.data || response.data;
       if (createdHub) {
-        setHubs([createdHub, ...hubs]);
+        await fetchHubs(currentPage);
         setIsAddModalOpen(false);
         setNotification({
           type: "success",
@@ -185,7 +197,7 @@ export default function HubsPage() {
 
       const updatedHub = response.data?.data || response.data;
       if (updatedHub) {
-        setHubs(hubs.map((h) => (h.id === selectedHub.id ? updatedHub : h)));
+        await fetchHubs(currentPage);
         setIsEditModalOpen(false);
         setNotification({
           type: "success",
@@ -302,7 +314,7 @@ export default function HubsPage() {
         </div>
         <div className="flex gap-2">
           <button
-            onClick={() => fetchHubs(true)}
+            onClick={() => fetchHubs(currentPage, true)}
             disabled={isRefreshing}
             className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl border border-slate-250 transition-colors cursor-pointer disabled:opacity-50"
             title="Làm mới danh sách"
@@ -342,7 +354,7 @@ export default function HubsPage() {
           <div className="bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm flex items-center gap-2">
             <span className="text-slate-500">Tổng số:</span>
             <span className="text-slate-800 font-bold text-sm">
-              {hubs.length}
+              {totalItems}
             </span>
           </div>
           <div className="bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm flex items-center gap-2">
@@ -458,6 +470,15 @@ export default function HubsPage() {
               </tbody>
             </table>
           </div>
+        )}
+        {!isLoading && filteredHubs.length > 0 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={totalItems}
+            itemsPerPage={itemsPerPage}
+            onPageChange={setCurrentPage}
+          />
         )}
       </div>
 

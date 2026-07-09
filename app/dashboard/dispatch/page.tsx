@@ -28,7 +28,10 @@ interface Shipper {
   id: string;
   full_name: string;
   phone_number: string;
-  is_online?: boolean;
+  vehicle_number?: string;
+  vehicle_type?: string;
+  current_shipment_status?: string | null;
+  current_shipment_id?: string | null;
 }
 
 interface Order {
@@ -117,20 +120,13 @@ export default function DispatchPage() {
       const hubsList = hubsRes.data?.data || hubsRes.data || [];
       if (Array.isArray(hubsList)) setHubs(hubsList);
 
-      // 2. Load shippers list
-      const usersRes = await api.get("/users");
-      const usersList = usersRes.data?.data || usersRes.data || [];
-      if (Array.isArray(usersList)) {
-        const filteredShippers = usersList.filter(
-          (u: {
-            id: string;
-            full_name: string;
-            phone_number: string;
-            role: string;
-            is_online: boolean;
-          }) => u.role === "SHIPPER" && u.is_online,
-        );
-        setShippers(filteredShippers);
+      // 2. Load shippers list for dispatch
+      if (currentHubId) {
+        const usersRes = await api.get(`/users/dispatch-shippers?hubId=${currentHubId}`);
+        const shippersList = usersRes.data?.data || usersRes.data || [];
+        if (Array.isArray(shippersList)) {
+          setShippers(shippersList);
+        }
       }
 
       // 3. Load shipments for this hub
@@ -620,14 +616,7 @@ export default function DispatchPage() {
           </h2>
           <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar">
             {(() => {
-              const busyShipperIds = shipments
-                .filter(
-                  (s) => s.status === "PENDING" || s.status === "IN_TRANSIT",
-                )
-                .map((s) => s.shipper.id);
-              const available = shippers.filter(
-                (s) => !busyShipperIds.includes(s.id),
-              );
+              const available = shippers.filter((s) => !s.current_shipment_id);
 
               if (available.length === 0) {
                 return (
@@ -645,22 +634,28 @@ export default function DispatchPage() {
                     setCreateForm({
                       ...createForm,
                       shipper_id: s.id,
-                      vehicle_type: "BIKE",
-                      capacity_weight: 50,
+                      vehicle_type:
+                        s.vehicle_type === "BIKE" ? "BIKE" : "TRUCK",
+                      vehicle_number: s.vehicle_number || "",
+                      capacity_weight: s.vehicle_type === "BIKE" ? 50 : 1000,
                       destination_hub_id: "",
                     });
                     setIsCreateModalOpen(true);
                   }}
                 >
                   <div className="w-8 h-8 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center shrink-0">
-                    <Bike className="w-4 h-4" />
+                    {s.vehicle_type === "BIKE" ? (
+                      <Bike className="w-4 h-4" />
+                    ) : (
+                      <Truck className="w-4 h-4" />
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-bold text-slate-800 truncate">
                       {s.full_name}
                     </p>
                     <p className="text-[10px] text-slate-500 truncate">
-                      {s.phone_number}
+                      {s.phone_number} - Xe: {s.vehicle_number || "Chưa có"}
                     </p>
                   </div>
                 </div>
