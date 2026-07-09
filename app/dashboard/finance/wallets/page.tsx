@@ -16,6 +16,8 @@ type WalletData = {
   shipperName: string;
   cod_debt: number;
   income_balance: number;
+  user?: { full_name: string };
+  transactions?: Transaction[];
 };
 
 type Transaction = {
@@ -58,34 +60,6 @@ const MOCK_WALLETS: WalletData[] = [
     income_balance: 50000,
   },
 ];
-
-const MOCK_TRANSACTIONS: Record<string, Transaction[]> = {
-  W001: [
-    {
-      id: "TX1",
-      type: "COD_DEPOSIT",
-      amount: 1500000,
-      date: "2026-07-08 10:00",
-      status: "PENDING",
-    },
-    {
-      id: "TX2",
-      type: "INCOME",
-      amount: 50000,
-      date: "2026-07-07 14:30",
-      status: "SUCCESS",
-    },
-  ],
-  W003: [
-    {
-      id: "TX3",
-      type: "COD_DEPOSIT",
-      amount: 2000000,
-      date: "2026-07-06 09:15",
-      status: "SUCCESS",
-    },
-  ],
-};
 
 export default function WalletsPage() {
   const [wallets] = useState<WalletData[]>(MOCK_WALLETS);
@@ -138,7 +112,7 @@ export default function WalletsPage() {
     setTimeout(() => {
       setIsSubmitting(false);
       showToast(
-        `Đã xác nhận nộp COD ${formatCurrency(amount)} cho tài xế ${selectedWallet.shipperName}`,
+        `Đã xác nhận nộp COD ${formatCurrency(amount)} cho tài xế ${selectedWallet.user?.full_name || "Shipper"}`,
         "success",
       );
       closeDrawer();
@@ -285,7 +259,7 @@ export default function WalletsPage() {
                   Chi tiết Ví
                 </h2>
                 <p className="text-sm text-slate-500">
-                  {selectedWallet.shipperName}
+                  {selectedWallet.user?.full_name || "Shipper"}
                 </p>
               </div>
               <button
@@ -370,67 +344,69 @@ export default function WalletsPage() {
                   Lịch sử giao dịch gần đây
                 </h3>
                 <div className="space-y-3">
-                  {(MOCK_TRANSACTIONS[selectedWallet.id] || []).length > 0 ? (
-                    (MOCK_TRANSACTIONS[selectedWallet.id] || []).map((tx) => (
-                      <div
-                        key={tx.id}
-                        className="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-lg shadow-sm"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                              tx.type === "COD_DEPOSIT"
-                                ? "bg-blue-100 text-blue-600"
-                                : tx.type === "INCOME"
-                                  ? "bg-emerald-100 text-emerald-600"
-                                  : "bg-orange-100 text-orange-600"
-                            }`}
-                          >
-                            {tx.type === "COD_DEPOSIT" ? (
-                              <ArrowRightLeft className="w-4 h-4" />
-                            ) : (
-                              <Wallet className="w-4 h-4" />
-                            )}
+                  {(selectedWallet?.transactions || []).length > 0 ? (
+                    (selectedWallet?.transactions || []).map(
+                      (tx: Transaction) => (
+                        <div
+                          key={tx.id}
+                          className="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-lg shadow-sm"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div
+                              className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                                tx.type === "COD_DEPOSIT"
+                                  ? "bg-blue-100 text-blue-600"
+                                  : tx.type === "INCOME"
+                                    ? "bg-emerald-100 text-emerald-600"
+                                    : "bg-orange-100 text-orange-600"
+                              }`}
+                            >
+                              {tx.type === "COD_DEPOSIT" ? (
+                                <ArrowRightLeft className="w-4 h-4" />
+                              ) : (
+                                <Wallet className="w-4 h-4" />
+                              )}
+                            </div>
+                            <div>
+                              <p className="text-xs font-medium text-slate-800">
+                                {tx.type === "COD_DEPOSIT"
+                                  ? "Nộp COD"
+                                  : tx.type === "INCOME"
+                                    ? "Cộng thu nhập"
+                                    : "Rút tiền"}
+                              </p>
+                              <p className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5">
+                                <Clock className="w-3 h-3" />
+                                {tx.date}
+                              </p>
+                            </div>
                           </div>
-                          <div>
-                            <p className="text-xs font-medium text-slate-800">
-                              {tx.type === "COD_DEPOSIT"
-                                ? "Nộp COD"
-                                : tx.type === "INCOME"
-                                  ? "Cộng thu nhập"
-                                  : "Rút tiền"}
+                          <div className="text-right">
+                            <p
+                              className={`text-sm font-semibold ${tx.type === "COD_DEPOSIT" ? "text-blue-600" : "text-emerald-600"}`}
+                            >
+                              {tx.type === "COD_DEPOSIT" ? "-" : "+"}
+                              {formatCurrency(tx.amount)}
                             </p>
-                            <p className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5">
-                              <Clock className="w-3 h-3" />
-                              {tx.date}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <p
-                            className={`text-sm font-semibold ${tx.type === "COD_DEPOSIT" ? "text-blue-600" : "text-emerald-600"}`}
-                          >
-                            {tx.type === "COD_DEPOSIT" ? "-" : "+"}
-                            {formatCurrency(tx.amount)}
-                          </p>
-                          <span
-                            className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium ${
-                              tx.status === "SUCCESS"
-                                ? "bg-emerald-100 text-emerald-700"
+                            <span
+                              className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium ${
+                                tx.status === "SUCCESS"
+                                  ? "bg-emerald-100 text-emerald-700"
+                                  : tx.status === "PENDING"
+                                    ? "bg-amber-100 text-amber-700"
+                                    : "bg-red-100 text-red-700"
+                              }`}
+                            >
+                              {tx.status === "SUCCESS"
+                                ? "Thành công"
                                 : tx.status === "PENDING"
-                                  ? "bg-amber-100 text-amber-700"
-                                  : "bg-red-100 text-red-700"
-                            }`}
-                          >
-                            {tx.status === "SUCCESS"
-                              ? "Thành công"
-                              : tx.status === "PENDING"
-                                ? "Đang xử lý"
-                                : "Thất bại"}
-                          </span>
+                                  ? "Đang xử lý"
+                                  : "Thất bại"}
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                    ))
+                      ),
+                    )
                   ) : (
                     <p className="text-sm text-slate-500 text-center py-4">
                       Chưa có giao dịch nào.

@@ -32,57 +32,28 @@ interface OrderStatItem {
   count: number;
 }
 
-const mockRecentOrders = [
-  {
-    id: "ORD-9481",
-    customer: "Nguyễn Văn A",
-    destination: "Bưu cục Cầu Giấy",
-    weight: "4.5 kg",
-    status: "PENDING",
-    time: "10 phút trước",
-  },
-  {
-    id: "ORD-9482",
-    customer: "Trần Thị B",
-    destination: "Bưu cục Quận 1",
-    weight: "12.0 kg",
-    status: "PICKED_UP",
-    time: "25 phút trước",
-  },
-  {
-    id: "ORD-9483",
-    customer: "Lê Hoàng C",
-    destination: "Bưu cục Hải Phòng",
-    weight: "1.2 kg",
-    status: "PENDING",
-    time: "1 giờ trước",
-  },
-  {
-    id: "ORD-9484",
-    customer: "Phạm Minh D",
-    destination: "Bưu cục Đà Nẵng",
-    weight: "25.8 kg",
-    status: "IN_TRANSIT",
-    time: "2 giờ trước",
-  },
-  {
-    id: "ORD-9485",
-    customer: "Đỗ Thanh E",
-    destination: "Bưu cục Thủ Đức",
-    weight: "8.1 kg",
-    status: "DELIVERED",
-    time: "3 giờ trước",
-  },
-];
+interface OrderData {
+  id: string;
+  customer?: string;
+  destination?: string;
+  weight?: string | number;
+  current_status?: string;
+  receiver_name?: string;
+  receiver?: string;
+  receiver_address?: string;
+  address?: string;
+  cod_amount?: number;
+  created_at?: string;
+}
 
 export default function DashboardPage() {
   const router = useRouter();
   const [user, setUser] = useState<LoggedInUser | null>(null);
 
-  // Các trạng thái dữ liệu thống kê
   const [statsData, setStatsData] = useState<OrderStatItem[]>([]);
+  const [recentOrders, setRecentOrders] = useState<OrderData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isDemoMode, setIsDemoMode] = useState(false);
+
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Load thông tin người dùng từ localStorage
@@ -114,9 +85,23 @@ export default function DashboardPage() {
 
       if (Array.isArray(data) && data.length > 0) {
         setStatsData(data);
-        setIsDemoMode(false);
       } else {
         throw new Error("Dữ liệu thống kê không hợp lệ");
+      }
+
+      try {
+        const savedUser = localStorage.getItem("user");
+        const userRole = savedUser ? JSON.parse(savedUser).role : "";
+        const ordersRes = await api.get(
+          userRole === "CUSTOMER" ? "/orders/me" : "/orders",
+        );
+        const ordData = ordersRes.data?.data || ordersRes.data || [];
+        if (Array.isArray(ordData)) {
+          ordData.sort((a: OrderData, b: OrderData) => new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime());
+          setRecentOrders(ordData.slice(0, 5));
+        }
+      } catch (e) {
+        console.warn("Lỗi fetch orders in dashboard", e);
       }
     } catch (error) {
       console.warn("Không kết nối được API /orders/statistics.", error);
@@ -124,7 +109,6 @@ export default function DashboardPage() {
         // Có thể set một lỗi chung hoặc bỏ qua
       }
       setStatsData([]);
-      setIsDemoMode(false);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -262,9 +246,9 @@ export default function DashboardPage() {
     return (
       <CoordinatorDashboard
         user={user}
-        isDemoMode={isDemoMode}
         onRefresh={() => fetchStatistics(true)}
         isRefreshing={isRefreshing}
+        recentOrders={recentOrders}
       />
     );
   }
@@ -273,9 +257,9 @@ export default function DashboardPage() {
     return (
       <CustomerDashboard
         user={user}
-        isDemoMode={isDemoMode}
         onRefresh={() => fetchStatistics(true)}
         isRefreshing={isRefreshing}
+        recentOrders={recentOrders}
       />
     );
   }
@@ -284,7 +268,6 @@ export default function DashboardPage() {
     return (
       <ShipperDashboard
         user={user}
-        isDemoMode={isDemoMode}
         onRefresh={() => fetchStatistics(true)}
         isRefreshing={isRefreshing}
       />
@@ -294,19 +277,6 @@ export default function DashboardPage() {
   return (
     <div className="space-y-8 animate-fadeIn">
       {/* Fallback Warning Alert for Demo Mode */}
-      {isDemoMode && (
-        <div className="p-4 bg-amber-50 border border-amber-200 text-amber-900 rounded-2xl flex items-start gap-3 shadow-sm">
-          <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-          <div className="text-xs">
-            <span className="font-bold">
-              Đang chạy ở chế độ giả lập (Demo Mode):
-            </span>{" "}
-            Không kết nối được tới API thống kê đơn hàng của Backend
-            (`http://localhost:3333/orders/statistics`). Dưới đây là thông số
-            giả lập để hỗ trợ xem trước UI.
-          </div>
-        </div>
-      )}
 
       {/* Welcome Banner */}
       <div className="relative overflow-hidden bg-gradient-to-r from-slate-900 to-blue-950 rounded-2xl p-6 sm:p-8 border border-slate-800 shadow-lg">
@@ -611,7 +581,7 @@ export default function DashboardPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-sm">
-                  {mockRecentOrders.map((order) => (
+                  {recentOrders.map((order: OrderData) => (
                     <tr
                       key={order.id}
                       className="hover:bg-slate-50/50 transition-colors"
@@ -631,31 +601,31 @@ export default function DashboardPage() {
                       <td className="px-6 py-4">
                         <span
                           className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
-                            order.status === "PENDING"
+                            order.current_status === "PENDING"
                               ? "bg-amber-50 text-amber-700 border border-amber-200"
-                              : order.status === "PICKED_UP"
+                              : order.current_status === "PICKED_UP"
                                 ? "bg-blue-50 text-blue-700 border border-blue-200"
-                                : order.status === "IN_TRANSIT"
+                                : order.current_status === "IN_TRANSIT"
                                   ? "bg-purple-50 text-purple-700 border border-purple-200"
                                   : "bg-emerald-50 text-emerald-700 border border-emerald-200"
                           }`}
                         >
                           <span
                             className={`w-1.5 h-1.5 rounded-full ${
-                              order.status === "PENDING"
+                              order.current_status === "PENDING"
                                 ? "bg-amber-500"
-                                : order.status === "PICKED_UP"
+                                : order.current_status === "PICKED_UP"
                                   ? "bg-blue-500"
-                                  : order.status === "IN_TRANSIT"
+                                  : order.current_status === "IN_TRANSIT"
                                     ? "bg-purple-500"
                                     : "bg-emerald-500"
                             }`}
                           />
-                          {order.status === "PENDING"
+                          {order.current_status === "PENDING"
                             ? "Chờ xử lý"
-                            : order.status === "PICKED_UP"
+                            : order.current_status === "PICKED_UP"
                               ? "Đã lấy"
-                              : order.status === "IN_TRANSIT"
+                              : order.current_status === "IN_TRANSIT"
                                 ? "Đang giao"
                                 : "Thành công"}
                         </span>
@@ -771,15 +741,16 @@ export default function DashboardPage() {
 // COMPONENT DASHBOARD DÀNH RIÊNG CHO KHÁCH HÀNG (CUSTOMER)
 interface CustomerDashboardProps {
   user: LoggedInUser | null;
-  isDemoMode: boolean;
   onRefresh: () => void;
   isRefreshing: boolean;
+  recentOrders?: OrderData[];
 }
 
 function CustomerDashboard({
   user,
   onRefresh,
   isRefreshing,
+  recentOrders = [],
 }: CustomerDashboardProps) {
   // Thống kê giả lập dành riêng cho shop của Khách hàng
   const shopMetrics = {
@@ -788,25 +759,6 @@ function CustomerDashboard({
     finished: 0,
     pending: 0,
   };
-
-  const shopOrders = [
-    {
-      id: "VN2026Y5R5I",
-      receiver: "Nguyễn Văn Khách",
-      address: "Quận 1, TP.HCM",
-      weight: "2.5 kg",
-      cod: "150.000 đ",
-      status: "CANCELLED",
-    },
-    {
-      id: "VN2026F3A21",
-      receiver: "Lê Văn Tiến",
-      address: "Lê Lợi, Hải Phòng",
-      weight: "2.5 kg",
-      cod: "450.000 đ",
-      status: "PENDING",
-    },
-  ];
 
   return (
     <div className="space-y-6 animate-fadeIn">
@@ -919,30 +871,35 @@ function CustomerDashboard({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {shopOrders.map((ord) => (
+              {recentOrders.map((ord: OrderData) => (
                 <tr key={ord.id} className="hover:bg-slate-50/40">
                   <td className="px-4 py-3 font-mono font-bold text-slate-900">
                     {ord.id}
                   </td>
                   <td className="px-4 py-3 font-semibold text-slate-800">
-                    {ord.receiver}
+                    {ord.receiver_name || ord.receiver || "Unknown"}
                   </td>
                   <td className="px-4 py-3 text-slate-550 max-w-xs truncate">
-                    {ord.address}
+                    {ord.receiver_address || ord.address || "N/A"}
                   </td>
-                  <td className="px-4 py-3 text-slate-600">{ord.weight}</td>
+                  <td className="px-4 py-3 text-slate-600">{ord.weight} kg</td>
                   <td className="px-4 py-3 text-blue-600 font-bold">
-                    {ord.cod}
+                    {ord.cod_amount
+                      ? new Intl.NumberFormat("vi-VN").format(ord.cod_amount) +
+                        " đ"
+                      : "0 đ"}
                   </td>
                   <td className="px-4 py-3">
                     <span
                       className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                        ord.status === "PENDING"
+                        ord.current_status === "PENDING"
                           ? "bg-amber-50 text-amber-700 border border-amber-100"
                           : "bg-red-50 text-red-700 border border-red-100"
                       }`}
                     >
-                      {ord.status === "PENDING" ? "Chờ xử lý" : "Đã hủy"}
+                      {ord.current_status === "PENDING"
+                        ? "Chờ xử lý"
+                        : "Đã hủy"}
                     </span>
                   </td>
                 </tr>
@@ -958,7 +915,6 @@ function CustomerDashboard({
 // COMPONENT DASHBOARD DÀNH RIÊNG CHO TÀI XẾ (SHIPPER)
 interface ShipperDashboardProps {
   user: LoggedInUser | null;
-  isDemoMode: boolean;
   onRefresh: () => void;
   isRefreshing: boolean;
 }
@@ -1013,14 +969,13 @@ function ShipperDashboard({
 // COMPONENT DASHBOARD DÀNH RIÊNG CHO NHÂN VIÊN ĐIỀU PHỐI (HUB COORDINATOR)
 interface CoordinatorDashboardProps {
   user: LoggedInUser | null;
-  isDemoMode: boolean;
   onRefresh: () => void;
   isRefreshing: boolean;
+  recentOrders?: OrderData[];
 }
 
 function CoordinatorDashboard({
   user,
-  isDemoMode,
   onRefresh,
   isRefreshing,
 }: CoordinatorDashboardProps) {
@@ -1080,16 +1035,6 @@ function CoordinatorDashboard({
   return (
     <div className="space-y-6 animate-fadeIn">
       {/* Demo Warning */}
-      {isDemoMode && (
-        <div className="p-4 bg-amber-50 border border-amber-200 text-amber-900 rounded-2xl flex items-start gap-3 shadow-sm text-xs">
-          <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-          <div>
-            <span className="font-bold">Đang hiển thị dữ liệu giám sát:</span>{" "}
-            Thống kê hoạt động dựa trên thông số cục bộ của{" "}
-            <span className="font-bold">{hubName}</span>.
-          </div>
-        </div>
-      )}
 
       {/* Banner chào mừng */}
       <div className="relative overflow-hidden bg-gradient-to-r from-blue-950 to-slate-900 rounded-2xl p-6 sm:p-8 border border-slate-800 shadow-lg">

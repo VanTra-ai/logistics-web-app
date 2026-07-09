@@ -102,7 +102,6 @@ export default function OrdersManagementPage() {
 
   // Loading & Modes
   const [isLoading, setIsLoading] = useState(true);
-  const [isDemoMode, setIsDemoMode] = useState(false);
   const [notification, setNotification] = useState<{
     type: "success" | "error";
     message: string;
@@ -301,8 +300,6 @@ export default function OrdersManagementPage() {
       } catch {
         console.warn("Could not load tariff for estimate.");
       }
-
-      setIsDemoMode(false);
     } catch (err) {
       console.warn("Lỗi kết nối API backend.", err);
       if (axios.isAxiosError(err) && err.response?.status === 403) {
@@ -311,7 +308,6 @@ export default function OrdersManagementPage() {
           message: "Bạn không có quyền xem thông tin này",
         });
       }
-      setIsDemoMode(false);
       setHubs([]);
       setShippers([]);
       setOrders([]);
@@ -385,63 +381,6 @@ export default function OrdersManagementPage() {
     }
 
     setIsSubmitLoading(true);
-
-    if (isDemoMode) {
-      const selectedHub =
-        hubs.find((h) => h.id === orderForm.pickup_hub_id) || hubs[0];
-      if (isOrderEditMode && selectedOrder) {
-        setOrders(
-          orders.map((o) =>
-            o.id === selectedOrder.id
-              ? {
-                  ...o,
-                  sender_name: orderForm.sender_name,
-                  sender_phone: orderForm.sender_phone,
-                  sender_address: orderForm.sender_address,
-                  receiver_name: orderForm.receiver_name,
-                  receiver_phone: orderForm.receiver_phone,
-                  receiver_address: orderForm.receiver_address,
-                  weight: orderForm.weight,
-                  cod_amount: orderForm.cod_amount,
-                  note: orderForm.note,
-                  pickup_hub: selectedHub,
-                }
-              : o,
-          ),
-        );
-        setNotification({
-          type: "success",
-          message: "Cập nhật đơn hàng thành công (Demo Mode)!",
-        });
-      } else {
-        const newOrd: Order = {
-          id: `ord-${Date.now()}`,
-          tracking_number: `VN2026${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
-          sender_name: orderForm.sender_name,
-          sender_phone: orderForm.sender_phone,
-          sender_address: orderForm.sender_address,
-          receiver_name: orderForm.receiver_name,
-          receiver_phone: orderForm.receiver_phone,
-          receiver_address: orderForm.receiver_address,
-          weight: orderForm.weight,
-          cod_amount: orderForm.cod_amount,
-          current_status: "PENDING",
-          created_at: new Date().toISOString(),
-          pickup_hub: selectedHub,
-          note: orderForm.note,
-          cod_status: "PENDING",
-          shipment: null,
-        };
-        setOrders([newOrd, ...orders]);
-        setNotification({
-          type: "success",
-          message: "Tạo đơn hàng thành công (Demo Mode)!",
-        });
-      }
-      setIsOrderModalOpen(false);
-      setIsSubmitLoading(false);
-      return;
-    }
 
     try {
       if (isOrderEditMode && selectedOrder) {
@@ -549,15 +488,6 @@ export default function OrdersManagementPage() {
     );
     if (!confirmDelete) return;
 
-    if (isDemoMode) {
-      setOrders(orders.filter((o) => o.id !== orderId));
-      setNotification({
-        type: "success",
-        message: "Đã xóa đơn hàng thành công (Demo Mode)!",
-      });
-      return;
-    }
-
     try {
       await api.delete(`/orders/${orderId}`);
       setNotification({ type: "success", message: "Xóa đơn hàng thành công!" });
@@ -573,20 +503,6 @@ export default function OrdersManagementPage() {
 
   // Quick order operations
   const handleQuickScanIn = async (trackingNum: string) => {
-    if (isDemoMode) {
-      setOrders(
-        orders.map((o) =>
-          o.tracking_number === trackingNum
-            ? { ...o, current_status: "AT_HUB" }
-            : o,
-        ),
-      );
-      setNotification({
-        type: "success",
-        message: `Quét mã nhập kho ${trackingNum} thành công (Demo)!`,
-      });
-      return;
-    }
     try {
       await api.post("/orders/scan-in", { tracking_numbers: [trackingNum] });
       setNotification({
@@ -604,20 +520,6 @@ export default function OrdersManagementPage() {
   };
 
   const handleQuickScanOut = async (trackingNum: string, shipperId: string) => {
-    if (isDemoMode) {
-      setOrders(
-        orders.map((o) =>
-          o.tracking_number === trackingNum
-            ? { ...o, current_status: "DELIVERING" }
-            : o,
-        ),
-      );
-      setNotification({
-        type: "success",
-        message: `Quét mã xuất kho giao shipper ${trackingNum} thành công (Demo)!`,
-      });
-      return;
-    }
     try {
       await api.post("/orders/scan-out", {
         tracking_numbers: [trackingNum],
@@ -638,20 +540,6 @@ export default function OrdersManagementPage() {
   };
 
   const handleQuickRetry = async (orderId: string) => {
-    if (isDemoMode) {
-      setOrders(
-        orders.map((o) =>
-          o.id === orderId
-            ? { ...o, current_status: "AT_HUB", note: "Giao lại lần 2" }
-            : o,
-        ),
-      );
-      setNotification({
-        type: "success",
-        message: "Đã tạo lệnh giao lại thành công (Demo)!",
-      });
-      return;
-    }
     try {
       await api.patch(`/orders/${orderId}/retry`, {
         note: "Yêu cầu giao lại từ điều phối viên",
@@ -671,18 +559,6 @@ export default function OrdersManagementPage() {
   };
 
   const handleQuickRts = async (orderId: string) => {
-    if (isDemoMode) {
-      setOrders(
-        orders.map((o) =>
-          o.id === orderId ? { ...o, current_status: "RETURN_TO_SENDER" } : o,
-        ),
-      );
-      setNotification({
-        type: "success",
-        message: "Đã chốt chuyển hoàn thành công (Demo)!",
-      });
-      return;
-    }
     try {
       await api.patch(`/orders/${orderId}/rts`, {
         reason: "Khách từ chối nhận hàng",
@@ -702,18 +578,6 @@ export default function OrdersManagementPage() {
   };
 
   const handleQuickRemit = async (orderId: string) => {
-    if (isDemoMode) {
-      setOrders(
-        orders.map((o) =>
-          o.id === orderId ? { ...o, cod_status: "REMITTED" } : o,
-        ),
-      );
-      setNotification({
-        type: "success",
-        message: "Đã đối soát quỹ COD thành công (Demo)!",
-      });
-      return;
-    }
     try {
       await api.post("/orders/remit", { order_ids: [orderId] });
       setNotification({
@@ -754,45 +618,6 @@ export default function OrdersManagementPage() {
 
     setIsSubmitLoading(true);
 
-    if (isDemoMode) {
-      const shipmentToAssign = shipments.find((s) => s.id === assignShipmentId);
-      const ordersToAssign = orders.filter((o) =>
-        ordersToAssignIds.includes(o.id),
-      );
-      if (shipmentToAssign) {
-        setShipments(
-          shipments.map((s) =>
-            s.id === assignShipmentId
-              ? {
-                  ...s,
-                  orders: [...s.orders, ...ordersToAssign],
-                }
-              : s,
-          ),
-        );
-        setOrders(
-          orders.map((o) =>
-            ordersToAssignIds.includes(o.id)
-              ? {
-                  ...o,
-                  shipment: {
-                    id: shipmentToAssign.id,
-                    vehicle_number: shipmentToAssign.vehicle_number,
-                  },
-                }
-              : o,
-          ),
-        );
-        setNotification({
-          type: "success",
-          message: `Gom nhóm đơn hàng thành công (Demo)!`,
-        });
-      }
-      setIsAssignShipmentOpen(false);
-      setIsSubmitLoading(false);
-      return;
-    }
-
     try {
       await api.patch(`/shipments/${assignShipmentId}/orders`, {
         order_ids: ordersToAssignIds,
@@ -826,55 +651,6 @@ export default function OrdersManagementPage() {
     }
 
     setIsSubmitLoading(true);
-
-    if (isDemoMode) {
-      if (isShipmentEditMode && selectedShipment) {
-        setShipments(
-          shipments.map((s) =>
-            s.id === selectedShipment.id
-              ? {
-                  ...s,
-                  vehicle_number: shipmentForm.vehicle_number.toUpperCase(),
-                  shipper:
-                    shippers.find((sh) => sh.id === shipmentForm.shipper_id) ||
-                    s.shipper,
-                  destination_hub:
-                    hubs.find(
-                      (h) => h.id === shipmentForm.destination_hub_id,
-                    ) || null,
-                }
-              : s,
-          ),
-        );
-        setNotification({
-          type: "success",
-          message: "Sửa gom nhóm thành công (Demo Mode)!",
-        });
-      } else {
-        const originId = currentUser?.hub?.id || hubs[0]?.id || "hub-1";
-        const newShip: Shipment = {
-          id: `ship-${Date.now()}`,
-          vehicle_number: shipmentForm.vehicle_number.toUpperCase(),
-          status: "PENDING",
-          created_at: new Date().toISOString(),
-          shipper:
-            shippers.find((s) => s.id === shipmentForm.shipper_id) ||
-            shippers[0],
-          origin_hub: hubs.find((h) => h.id === originId) || hubs[0],
-          destination_hub:
-            hubs.find((h) => h.id === shipmentForm.destination_hub_id) || null,
-          orders: [],
-        };
-        setShipments([newShip, ...shipments]);
-        setNotification({
-          type: "success",
-          message: "Tạo gom nhóm chuyến xe mới thành công (Demo Mode)!",
-        });
-      }
-      setIsShipmentModalOpen(false);
-      setIsSubmitLoading(false);
-      return;
-    }
 
     try {
       if (isShipmentEditMode && selectedShipment) {
@@ -944,20 +720,6 @@ export default function OrdersManagementPage() {
       "Bạn có chắc chắn muốn xóa gom nhóm này? Tất cả đơn hàng trên xe sẽ được giải phóng quay lại kho bãi.",
     );
     if (!confirmDelete) return;
-
-    if (isDemoMode) {
-      setShipments(shipments.filter((s) => s.id !== shipmentId));
-      setOrders(
-        orders.map((o) =>
-          o.shipment?.id === shipmentId ? { ...o, shipment: null } : o,
-        ),
-      );
-      setNotification({
-        type: "success",
-        message: "Đã xóa gom nhóm thành công (Demo Mode)!",
-      });
-      return;
-    }
 
     try {
       await api.delete(`/shipments/${shipmentId}`);
@@ -1046,18 +808,6 @@ export default function OrdersManagementPage() {
   return (
     <div className="space-y-6 animate-fadeIn">
       {/* Demo Warning */}
-      {isDemoMode && (
-        <div className="p-4 bg-amber-50 border border-amber-200 text-amber-900 rounded-2xl flex items-start gap-3 shadow-sm text-xs">
-          <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-          <div>
-            <span className="font-bold">
-              Đang chạy ở chế độ giả lập (Demo Mode):
-            </span>{" "}
-            CSDL chính của Backend không kết nối được hoặc bị thiếu quyền. Hệ
-            thống tự động chuyển sang mô phỏng vận hành.
-          </div>
-        </div>
-      )}
 
       {/* Floating Notification */}
       {notification && (
@@ -1461,15 +1211,16 @@ export default function OrdersManagementPage() {
                                 >
                                   <Edit2 className="w-4 h-4" />
                                 </button>
-                                {item.current_status === "PENDING" && !item.shipment && (
-                                  <button
-                                    onClick={() => handleDeleteOrder(item.id)}
-                                    className="p-1 hover:text-red-650 cursor-pointer"
-                                    title="Xóa đơn hàng (soft delete)"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                )}
+                                {item.current_status === "PENDING" &&
+                                  !item.shipment && (
+                                    <button
+                                      onClick={() => handleDeleteOrder(item.id)}
+                                      className="p-1 hover:text-red-650 cursor-pointer"
+                                      title="Xóa đơn hàng (soft delete)"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  )}
                               </>
                             )}
                           </div>

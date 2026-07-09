@@ -29,7 +29,6 @@ export default function FinanceTariffPage() {
   const [activeTab, setActiveTab] = useState<"TARIFF" | "COMMISSION">("TARIFF");
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitLoading, setIsSubmitLoading] = useState(false);
-  const [isDemoMode, setIsDemoMode] = useState(false);
   const [notification, setNotification] = useState<{
     type: "success" | "error";
     message: string;
@@ -55,7 +54,6 @@ export default function FinanceTariffPage() {
       } else if (res.data) {
         setConfig(res.data);
       }
-      setIsDemoMode(false);
     } catch (err) {
       console.warn("Lỗi tải cấu hình tài chính từ backend.", err);
       if (axios.isAxiosError(err) && err.response?.status === 403) {
@@ -64,7 +62,6 @@ export default function FinanceTariffPage() {
           message: "Bạn không có quyền xem bảng giá và hoa hồng",
         });
       }
-      setIsDemoMode(false);
     } finally {
       setIsLoading(false);
     }
@@ -81,15 +78,6 @@ export default function FinanceTariffPage() {
     e.preventDefault();
     setIsSubmitLoading(true);
     setNotification(null);
-
-    if (isDemoMode) {
-      setNotification({
-        type: "success",
-        message: "Đã lưu cấu hình tài chính thành công (Demo Mode)!",
-      });
-      setIsSubmitLoading(false);
-      return;
-    }
 
     try {
       await api.patch("/finance/tariff", {
@@ -126,18 +114,6 @@ export default function FinanceTariffPage() {
   return (
     <div className="space-y-6 animate-fadeIn">
       {/* Demo Warning */}
-      {isDemoMode && (
-        <div className="p-4 bg-amber-50 border border-amber-200 text-amber-900 rounded-2xl flex items-start gap-3 shadow-sm text-xs">
-          <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-          <div>
-            <span className="font-bold">
-              Đang chạy ở chế độ giả lập (Demo Mode):
-            </span>{" "}
-            Hệ thống tự động chuyển sang mô phỏng quản trị dòng tiền do không
-            kết nối được API backend.
-          </div>
-        </div>
-      )}
 
       {/* Floating Notification */}
       {notification && (

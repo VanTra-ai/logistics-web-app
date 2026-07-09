@@ -33,7 +33,6 @@ export default function HubsPage() {
   const [hubs, setHubs] = useState<Hub[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [isLoading, setIsLoading] = useState(true);
-  const [isDemoMode, setIsDemoMode] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Trạng thái thông báo chung
@@ -69,7 +68,6 @@ export default function HubsPage() {
 
       if (Array.isArray(data)) {
         setHubs(data);
-        setIsDemoMode(false);
       } else {
         throw new Error("Dữ liệu bưu cục trả về không đúng định dạng");
       }
@@ -82,7 +80,6 @@ export default function HubsPage() {
         });
       }
       setHubs([]);
-      setIsDemoMode(false);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -141,25 +138,6 @@ export default function HubsPage() {
     setIsSubmitLoading(true);
     setFormError("");
 
-    if (isDemoMode) {
-      // Giả lập lưu trên Client
-      const newHub: Hub = {
-        id: `hub-${Date.now()}`,
-        name: formData.name,
-        address: formData.address,
-        is_active: true,
-        created_at: new Date().toISOString(),
-      };
-      setHubs([newHub, ...hubs]);
-      setIsAddModalOpen(false);
-      setNotification({
-        type: "success",
-        message: "Đã thêm bưu cục mới thành công (Demo Mode)!",
-      });
-      setIsSubmitLoading(false);
-      return;
-    }
-
     try {
       const response = await api.post("/hubs", {
         name: formData.name,
@@ -198,29 +176,6 @@ export default function HubsPage() {
     setIsSubmitLoading(true);
     setFormError("");
 
-    if (isDemoMode) {
-      // Giả lập cập nhật trên Client
-      setHubs(
-        hubs.map((h) =>
-          h.id === selectedHub.id
-            ? {
-                ...h,
-                name: formData.name,
-                address: formData.address,
-                is_active: formData.is_active,
-              }
-            : h,
-        ),
-      );
-      setIsEditModalOpen(false);
-      setNotification({
-        type: "success",
-        message: "Cập nhật bưu cục thành công (Demo Mode)!",
-      });
-      setIsSubmitLoading(false);
-      return;
-    }
-
     try {
       const response = await api.patch(`/hubs/${selectedHub.id}`, {
         name: formData.name,
@@ -254,26 +209,6 @@ export default function HubsPage() {
       `Bạn có chắc chắn muốn đóng cửa bưu cục "${hub.name}" không? Hàng tồn kho của bưu cục phải bằng 0 mới thực hiện được.`,
     );
     if (!confirmDelete) return;
-
-    if (isDemoMode) {
-      // Giả lập kiểm tra nghiệp vụ trên Client:
-      // Bưu cục Cầu Giấy (hub-1) hoặc Quận 1 (hub-2) được giả lập là có đơn hàng tồn kho
-      if (hub.id === "hub-1" || hub.id === "hub-2") {
-        setNotification({
-          type: "error",
-          message: `Không thể đóng cửa! Bưu cục ${hub.name} này vẫn còn đơn hàng đang tồn kho (Demo Check).`,
-        });
-      } else {
-        setHubs(
-          hubs.map((h) => (h.id === hub.id ? { ...h, is_active: false } : h)),
-        );
-        setNotification({
-          type: "success",
-          message: `Đã đóng cửa bưu cục ${hub.name} an toàn (Demo Mode)!`,
-        });
-      }
-      return;
-    }
 
     try {
       const response = await api.delete(`/hubs/${hub.id}`);
@@ -322,19 +257,6 @@ export default function HubsPage() {
   return (
     <div className="space-y-6 animate-fadeIn">
       {/* Cảnh báo chế độ giả lập */}
-      {isDemoMode && (
-        <div className="p-4 bg-amber-50 border border-amber-200 text-amber-900 rounded-2xl flex items-start gap-3 shadow-sm">
-          <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-          <div className="text-xs">
-            <span className="font-bold">
-              Đang chạy ở chế độ giả lập (Demo Mode):
-            </span>{" "}
-            Hệ thống web app không kết nối được tới API Backend
-            (`http://localhost:3333/hubs`). Các hành động Thêm/Sửa/Đóng cửa bưu
-            cục sẽ chỉ mô phỏng trên Client.
-          </div>
-        </div>
-      )}
 
       {/* Floating Notifications toast */}
       {notification && (

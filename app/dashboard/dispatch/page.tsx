@@ -65,7 +65,6 @@ export default function DispatchPage() {
   const [availableOrders, setAvailableOrders] = useState<Order[]>([]);
 
   const [isLoading, setIsLoading] = useState(true);
-  const [isDemoMode, setIsDemoMode] = useState(false);
   const [notification, setNotification] = useState<{
     type: "success" | "error";
     message: string;
@@ -94,7 +93,7 @@ export default function DispatchPage() {
     setNotification(null);
 
     // Get current user from localStorage
-    let currentHubId = "hub-1"; // Fallback
+    let currentHubId: string | null = null;
     if (typeof window !== "undefined") {
       const savedUser = localStorage.getItem("user");
       if (savedUser) {
@@ -130,7 +129,9 @@ export default function DispatchPage() {
       }
 
       // 3. Load shipments for this hub
-      const shipmentsRes = await api.get(`/hubs/${currentHubId}/shipments`);
+      const shipmentsRes = currentHubId
+        ? await api.get(`/hubs/${currentHubId}/shipments`)
+        : await api.get("/shipments");
       const shipmentsList = shipmentsRes.data?.data || shipmentsRes.data || [];
       if (Array.isArray(shipmentsList)) setShipments(shipmentsList);
 
@@ -146,8 +147,6 @@ export default function DispatchPage() {
         );
         setAvailableOrders(atHubOrders);
       }
-
-      setIsDemoMode(false);
     } catch (err) {
       console.warn("Lỗi kết nối API backend.", err);
       if (axios.isAxiosError(err) && err.response?.status === 403) {
@@ -156,7 +155,6 @@ export default function DispatchPage() {
           message: "Bạn không có quyền truy cập thông tin điều phối",
         });
       }
-      setIsDemoMode(false);
       setHubs([]);
       setShippers([]);
       setShipments([]);
@@ -227,30 +225,6 @@ export default function DispatchPage() {
     setIsSubmitLoading(true);
     const originId = currentUser?.hub?.id || "hub-1";
 
-    if (isDemoMode) {
-      const newShip: Shipment = {
-        id: `ship-${Date.now()}`,
-        vehicle_number: createForm.vehicle_number.toUpperCase(),
-        status: "PENDING",
-        created_at: new Date().toISOString(),
-        shipper:
-          shippers.find((s) => s.id === createForm.shipper_id) || shippers[0],
-        origin_hub: hubs.find((h) => h.id === originId) || hubs[0],
-        destination_hub:
-          hubs.find((h) => h.id === createForm.destination_hub_id) || null,
-        capacity_weight: Number(createForm.capacity_weight) || 1000,
-        orders: [],
-      };
-      setShipments([newShip, ...shipments]);
-      setIsCreateModalOpen(false);
-      setNotification({
-        type: "success",
-        message: "Đã tạo chuyến xe tải mới thành công (Demo Mode)!",
-      });
-      setIsSubmitLoading(false);
-      return;
-    }
-
     try {
       const response = await api.post("/shipments", {
         shipper_id: createForm.shipper_id,
@@ -300,32 +274,6 @@ export default function DispatchPage() {
 
     setIsSubmitLoading(true);
 
-    if (isDemoMode) {
-      const ordersToAssign = availableOrders.filter((o) =>
-        selectedOrderIds.includes(o.id),
-      );
-      setShipments(
-        shipments.map((s) =>
-          s.id === selectedShipment.id
-            ? {
-                ...s,
-                orders: [...s.orders, ...ordersToAssign],
-              }
-            : s,
-        ),
-      );
-      setAvailableOrders(
-        availableOrders.filter((o) => !selectedOrderIds.includes(o.id)),
-      );
-      setIsAssignModalOpen(false);
-      setNotification({
-        type: "success",
-        message: `Đã xếp ${selectedOrderIds.length} kiện hàng lên xe (Demo Mode)!`,
-      });
-      setIsSubmitLoading(false);
-      return;
-    }
-
     try {
       await api.patch(`/shipments/${selectedShipment.id}/orders`, {
         order_ids: selectedOrderIds,
@@ -361,19 +309,6 @@ export default function DispatchPage() {
     );
     if (!confirmDispatch) return;
 
-    if (isDemoMode) {
-      setShipments(
-        shipments.map((s) =>
-          s.id === shipment.id ? { ...s, status: "IN_TRANSIT" } : s,
-        ),
-      );
-      setNotification({
-        type: "success",
-        message: `Chuyến xe ${shipment.vehicle_number} xuất bến thành công (Demo Mode)!`,
-      });
-      return;
-    }
-
     try {
       await api.patch(`/shipments/${shipment.id}/status`, {
         status: "IN_TRANSIT",
@@ -399,18 +334,6 @@ export default function DispatchPage() {
   return (
     <div className="space-y-6 animate-fadeIn">
       {/* Demo Warning */}
-      {isDemoMode && (
-        <div className="p-4 bg-amber-50 border border-amber-200 text-amber-900 rounded-2xl flex items-start gap-3 shadow-sm text-xs">
-          <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-          <div>
-            <span className="font-bold">
-              Đang chạy ở chế độ giả lập (Demo Mode):
-            </span>{" "}
-            Kết nối tới máy chủ `/shipments` không khả dụng. Bạn có thể mô phỏng
-            quy trình tạo xe, xếp đơn hàng và cho xe xuất bến bình thường.
-          </div>
-        </div>
-      )}
 
       {/* Floating Notification */}
       {notification && (

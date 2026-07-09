@@ -46,7 +46,6 @@ export default function UsersManagementPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("ALL");
   const [isLoading, setIsLoading] = useState(true);
-  const [isDemoMode, setIsDemoMode] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Modals & Notifications
@@ -99,7 +98,6 @@ export default function UsersManagementPage() {
       const data = response.data?.data || response.data || [];
       if (Array.isArray(data)) {
         setUsers(data);
-        setIsDemoMode(false);
       } else {
         throw new Error("Dữ liệu nhân viên trả về không đúng định dạng");
       }
@@ -112,7 +110,6 @@ export default function UsersManagementPage() {
         });
       }
       setUsers([]);
-      setIsDemoMode(false);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -195,7 +192,9 @@ export default function UsersManagementPage() {
       (formData.role === "HUB_COORDINATOR" || formData.role === "SHIPPER") &&
       !formData.hubId
     ) {
-      setFormError(`Vui lòng chọn bưu cục cho vai trò ${formData.role === "SHIPPER" ? "Shipper" : "Điều phối viên"}!`);
+      setFormError(
+        `Vui lòng chọn bưu cục cho vai trò ${formData.role === "SHIPPER" ? "Shipper" : "Điều phối viên"}!`,
+      );
       return;
     }
 
@@ -210,28 +209,6 @@ export default function UsersManagementPage() {
       role: formData.role,
       ...(formData.hubId ? { hubId: formData.hubId } : {}),
     };
-
-    if (isDemoMode) {
-      const selectedHubObj = hubs.find((h) => h.id === formData.hubId) || null;
-      const newUser: User = {
-        id: `user-${Date.now()}`,
-        email: formData.email,
-        phone_number: formData.phone_number,
-        full_name: formData.fullName,
-        role: formData.role,
-        status: "ACTIVE",
-        created_at: new Date().toISOString(),
-        hub: selectedHubObj,
-      };
-      setUsers([newUser, ...users]);
-      setIsAddModalOpen(false);
-      setNotification({
-        type: "success",
-        message: "Đã thêm nhân viên nội bộ thành công (Demo Mode)!",
-      });
-      setIsSubmitLoading(false);
-      return;
-    }
 
     try {
       const response = await api.post("/users/internal", payload);
@@ -270,7 +247,9 @@ export default function UsersManagementPage() {
       (formData.role === "HUB_COORDINATOR" || formData.role === "SHIPPER") &&
       !formData.hubId
     ) {
-      setFormError(`Vui lòng chọn bưu cục cho vai trò ${formData.role === "SHIPPER" ? "Shipper" : "Điều phối viên"}!`);
+      setFormError(
+        `Vui lòng chọn bưu cục cho vai trò ${formData.role === "SHIPPER" ? "Shipper" : "Điều phối viên"}!`,
+      );
       return;
     }
 
@@ -284,31 +263,6 @@ export default function UsersManagementPage() {
       status: formData.status,
       hubId: formData.hubId || null,
     };
-
-    if (isDemoMode) {
-      const selectedHubObj = hubs.find((h) => h.id === formData.hubId) || null;
-      setUsers(
-        users.map((u) =>
-          u.id === selectedUser.id
-            ? {
-                ...u,
-                full_name: formData.fullName,
-                phone_number: formData.phone_number,
-                role: formData.role,
-                status: formData.status,
-                hub: selectedHubObj,
-              }
-            : u,
-        ),
-      );
-      setIsEditModalOpen(false);
-      setNotification({
-        type: "success",
-        message: "Cập nhật tài khoản thành công (Demo Mode)!",
-      });
-      setIsSubmitLoading(false);
-      return;
-    }
 
     try {
       const response = await api.patch(`/users/${selectedUser.id}`, payload);
@@ -339,17 +293,6 @@ export default function UsersManagementPage() {
     );
     if (!confirmDeactivate) return;
 
-    if (isDemoMode) {
-      setUsers(
-        users.map((u) => (u.id === user.id ? { ...u, status: "INACTIVE" } : u)),
-      );
-      setNotification({
-        type: "success",
-        message: `Đã ngưng hoạt động tài khoản ${user.full_name} (Demo Mode)!`,
-      });
-      return;
-    }
-
     try {
       await api.delete(`/users/${user.id}`);
       setUsers(
@@ -374,17 +317,6 @@ export default function UsersManagementPage() {
 
   // Kích hoạt lại tài khoản nhân viên (PATCH /users/:id với status ACTIVE)
   const handleActivateUser = async (user: User) => {
-    if (isDemoMode) {
-      setUsers(
-        users.map((u) => (u.id === user.id ? { ...u, status: "ACTIVE" } : u)),
-      );
-      setNotification({
-        type: "success",
-        message: `Đã kích hoạt lại tài khoản ${user.full_name} (Demo Mode)!`,
-      });
-      return;
-    }
-
     try {
       await api.patch(`/users/${user.id}`, { status: "ACTIVE" });
       setUsers(
@@ -447,19 +379,6 @@ export default function UsersManagementPage() {
   return (
     <div className="space-y-6 animate-fadeIn">
       {/* Cảnh báo chế độ giả lập */}
-      {isDemoMode && (
-        <div className="p-4 bg-amber-50 border border-amber-200 text-amber-900 rounded-2xl flex items-start gap-3 shadow-sm">
-          <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-          <div className="text-xs">
-            <span className="font-bold">
-              Đang chạy ở chế độ giả lập (Demo Mode):
-            </span>{" "}
-            Hệ thống không kết nối được tới API Backend
-            (`http://localhost:3333/users`). Các hành động Thêm/Sửa/Khóa nhân
-            viên sẽ được thực hiện tạm thời trên client.
-          </div>
-        </div>
-      )}
 
       {/* Floating Notifications toast */}
       {notification && (

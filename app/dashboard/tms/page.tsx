@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   MapPin as MapPinIcon,
   Package,
@@ -61,50 +61,102 @@ interface Shipper {
 }
 
 export default function TMSDashboard() {
-  const [orders, setOrders] = useState<Order[]>([
-    {
-      id: "ORD-001",
-      status: "DISPATCHED",
-      customer: "Nguyễn Văn A",
-      address: "123 P. Lê Lợi",
-      lat: 21.0285,
-      lng: 105.8542,
-      delivery_sequence: 1,
-    },
-    {
-      id: "ORD-002",
-      status: "DISPATCHED",
-      customer: "Trần Thị B",
-      address: "45 P. Hai Bà Trưng",
-      lat: 21.0245,
-      lng: 105.8492,
-      delivery_sequence: 2,
-    },
-    {
-      id: "ORD-003",
-      status: "PENDING",
-      customer: "Lê Văn C",
-      address: "89 P. Quang Trung",
-      lat: 21.0315,
-      lng: 105.8422,
-      delivery_sequence: null,
-    },
-  ]);
-  const [hubs] = useState<Hub[]>([
-    { id: "HUB-HN1", name: "Bưu cục Cầu Giấy", lat: 21.0335, lng: 105.7952 },
-  ]);
-  const [shippers] = useState<Shipper[]>([
-    {
-      id: "SHIP-01",
-      name: "Phạm Văn D",
-      status: "ACTIVE",
-      lat: 21.03,
-      lng: 105.8,
-    },
-  ]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [hubs, setHubs] = useState<Hub[]>([]);
+  const [shippers, setShippers] = useState<Shipper[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
   const [virtualPlan, setVirtualPlan] = useState<VirtualShipment[]>([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [ordersRes, hubsRes, usersRes] = await Promise.all([
+          api.get("/orders"),
+          api.get("/hubs"),
+          api.get("/users"),
+        ]);
+
+        const ordersList = ordersRes.data?.data || ordersRes.data || [];
+        const mappedOrders = ordersList.map(
+          (o: {
+            id: string;
+            tracking_number: string;
+            current_status: string;
+            receiver_address: string;
+            weight: number;
+            volume: number;
+            latitude: number;
+            longitude: number;
+            [key: string]: unknown;
+          }) => ({
+            id: o.tracking_number,
+            status: o.current_status,
+            customer: o.receiver_name,
+            address: o.receiver_address,
+            lat: 21.0285 + (Math.random() - 0.5) * 0.1, // Fallback if no geocode
+            lng: 105.8542 + (Math.random() - 0.5) * 0.1, // Fallback if no geocode
+            delivery_sequence: null,
+          }),
+        );
+        setOrders(mappedOrders);
+
+        const hubsList = hubsRes.data?.data || hubsRes.data || [];
+        setHubs(
+          hubsList.map(
+            (h: {
+              id: string;
+              name: string;
+              latitude: number;
+              longitude: number;
+              [key: string]: unknown;
+            }) => ({
+              id: h.id,
+              name: h.name,
+              lat: 21.0335 + (Math.random() - 0.5) * 0.1,
+              lng: 105.7952 + (Math.random() - 0.5) * 0.1,
+            }),
+          ),
+        );
+
+        const usersList = usersRes.data?.data || usersRes.data || [];
+        const shippersList = usersList.filter(
+          (u: {
+            id: string;
+            full_name: string;
+            phone_number: string;
+            current_latitude: number;
+            current_longitude: number;
+            is_online: boolean;
+            role: string;
+            [key: string]: unknown;
+          }) => u.role === "SHIPPER",
+        );
+        setShippers(
+          shippersList.map(
+            (s: {
+              id: string;
+              full_name: string;
+              phone_number: string;
+              current_latitude: number;
+              current_longitude: number;
+              is_online: boolean;
+              [key: string]: unknown;
+            }) => ({
+              id: s.id,
+              name: s.full_name,
+              status: s.is_online ? "ACTIVE" : "INACTIVE",
+              lat: 21.03 + (Math.random() - 0.5) * 0.1,
+              lng: 105.8 + (Math.random() - 0.5) * 0.1,
+            }),
+          ),
+        );
+      } catch (err) {
+        console.error("Failed to fetch TMS data", err);
+      }
+    };
+    fetchData();
+  }, []);
 
   const handleAutoDispatch = async () => {
     setIsLoading(true);

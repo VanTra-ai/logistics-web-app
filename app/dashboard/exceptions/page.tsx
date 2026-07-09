@@ -41,7 +41,6 @@ export default function ExceptionsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [isLoading, setIsLoading] = useState(true);
-  const [isDemoMode, setIsDemoMode] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Notifications & Modal states
@@ -89,7 +88,6 @@ export default function ExceptionsPage() {
           ? data.filter((o: Order) => o.pickup_hub?.id === currentHubId)
           : data;
         setOrders(hubOrders);
-        setIsDemoMode(false);
       } else {
         throw new Error("Dữ liệu đơn hàng không đúng định dạng");
       }
@@ -102,7 +100,6 @@ export default function ExceptionsPage() {
         });
       }
       setOrders([]);
-      setIsDemoMode(false);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -162,28 +159,6 @@ export default function ExceptionsPage() {
       formData.incident_image_url.trim() ||
       "https://images.unsplash.com/photo-1595246140625-573b715d11dc?w=400"; // Mock image url
 
-    if (isDemoMode) {
-      setOrders(
-        orders.map((o) =>
-          o.id === selectedOrder.id
-            ? {
-                ...o,
-                current_status: "FAILED",
-                note: `[SỰ CỐ - ${formData.issueType}]: ${formData.description}`,
-                delivery_image_url: incidentUrl,
-              }
-            : o,
-        ),
-      );
-      setIsReportModalOpen(false);
-      setNotification({
-        type: "success",
-        message: `Đã báo lỗi sự cố đơn hàng ${selectedOrder.tracking_number} thành công (Demo Mode)!`,
-      });
-      setIsSubmitLoading(false);
-      return;
-    }
-
     try {
       await api.post(`/incidents`, {
         orderId: selectedOrder.id,
@@ -214,19 +189,6 @@ export default function ExceptionsPage() {
       `Xác nhận sự cố đơn hàng "${order.tracking_number}" đã được xử lý xong? Đơn hàng sẽ được chuyển lại về trạng thái AT_HUB để tiếp tục đi giao.`,
     );
     if (!confirmResolve) return;
-
-    if (isDemoMode) {
-      setOrders(
-        orders.map((o) =>
-          o.id === order.id ? { ...o, current_status: "AT_HUB" } : o,
-        ),
-      );
-      setNotification({
-        type: "success",
-        message: `Đã giải tỏa đơn hàng ${order.tracking_number} thành công (Demo Mode)!`,
-      });
-      return;
-    }
 
     try {
       await api.patch(`/orders/${order.id}/status`, {
@@ -266,18 +228,6 @@ export default function ExceptionsPage() {
   return (
     <div className="space-y-6 animate-fadeIn">
       {/* Demo Warning */}
-      {isDemoMode && (
-        <div className="p-4 bg-amber-50 border border-amber-200 text-amber-900 rounded-2xl flex items-start gap-3 shadow-sm text-xs">
-          <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-          <div>
-            <span className="font-bold">
-              Đang chạy ở chế độ giả lập (Demo Mode):
-            </span>{" "}
-            Kết nối cơ sở dữ liệu lỗi sự cố bưu cục được mô phỏng trên Client.
-            Bạn có thể báo cáo hư hỏng hoặc mở khóa giải tỏa đơn bình thường.
-          </div>
-        </div>
-      )}
 
       {/* Floating Notification */}
       {notification && (
@@ -565,16 +515,22 @@ export default function ExceptionsPage() {
                   ảnh sự cố (Giả lập)
                 </label>
                 <input
-                  type="text"
-                  className="block w-full px-3.5 py-2.5 bg-slate-50 border border-slate-250 text-slate-800 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm placeholder:text-slate-400"
-                  placeholder="Để trống để tự động lấy ảnh giả lập..."
-                  value={formData.incident_image_url}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      incident_image_url: e.target.value,
-                    })
-                  }
+                  type="file"
+                  accept="image/*"
+                  className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onloadend = () => {
+                        setFormData({
+                          ...formData,
+                          incident_image_url: reader.result as string,
+                        });
+                      };
+                      reader.readAsDataURL(file);
+                    }
+                  }}
                 />
               </div>
 
