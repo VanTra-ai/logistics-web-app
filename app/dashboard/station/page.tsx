@@ -47,6 +47,8 @@ export default function StationPage() {
     timestamp: string;
     suggestedZone?: string;
     orderIds?: string[];
+    isReturn?: boolean;
+    hasUpdatedWeight?: boolean;
   } | null>(null);
   const [flashColor, setFlashColor] = useState<"GREEN" | "RED" | null>(null);
 
@@ -173,6 +175,7 @@ export default function StationPage() {
 
         let suggestedZone = "Khu vực A (Mặc định)";
         let orderIds: string[] = [];
+        let isReturn = false;
         if (
           res.data?.success_trackings &&
           res.data.success_trackings.length > 0
@@ -183,16 +186,22 @@ export default function StationPage() {
           orderIds = res.data.success_trackings.map(
             (t: { order_id: string }) => t.order_id,
           );
+          isReturn = !!res.data.success_trackings.find(
+            (t: { is_return?: boolean }) => t.is_return,
+          );
         }
 
-        setFlashColor("GREEN");
+        setFlashColor(isReturn ? "RED" : "GREEN");
         setScanResult({
           success: true,
-          title: "NHẬP KHO THÀNH CÔNG",
-          message: `${newScans.length} vận đơn đã nhập kho thành công.`,
+          title: isReturn ? "NHẬP KHO HÀNG HOÀN" : "NHẬP KHO THÀNH CÔNG",
+          message: isReturn
+            ? "ĐÂY LÀ HÀNG HOÀN - YÊU CẦU PHÂN LOẠI VÀO KHU VỰC TRẢ HÀNG"
+            : `${newScans.length} vận đơn đã nhập kho thành công.`,
           timestamp: new Date().toLocaleTimeString(),
           suggestedZone,
           orderIds,
+          isReturn,
         });
       } else {
         // OUTBOUND
@@ -488,29 +497,58 @@ export default function StationPage() {
 
               {scanResult ? (
                 <div className="space-y-5 animate-scaleUp">
-                  <div className="text-center py-4">
-                    {scanResult.success ? (
-                      <CheckCircle2 className="w-16 h-16 text-emerald-500 mx-auto" />
-                    ) : (
-                      <AlertCircle className="w-16 h-16 text-red-500 mx-auto" />
-                    )}
-                    <h3
-                      className={`text-md font-extrabold mt-3 tracking-wide ${
-                        scanResult.success ? "text-emerald-600" : "text-red-600"
-                      }`}
-                    >
-                      {scanResult.title}
-                    </h3>
-                  </div>
-
                   <div
-                    className={`p-4 rounded-2xl border text-xs font-semibold leading-relaxed ${
-                      scanResult.success
-                        ? "bg-emerald-50 text-emerald-950 border-emerald-100"
-                        : "bg-red-50 text-red-950 border-red-100"
+                    className={`p-6 border rounded-2xl relative overflow-hidden transition-colors ${
+                      scanResult.isReturn
+                        ? "bg-orange-50 border-orange-200"
+                        : scanResult.success
+                          ? "bg-emerald-50 border-emerald-200"
+                          : "bg-red-50 border-red-200"
                     }`}
                   >
-                    {scanResult.message}
+                    <div className="flex items-start gap-4">
+                      <div
+                        className={`p-3 rounded-full shrink-0 ${
+                          scanResult.isReturn
+                            ? "bg-orange-100 text-orange-600"
+                            : scanResult.success
+                              ? "bg-emerald-100 text-emerald-600"
+                              : "bg-red-100 text-red-600"
+                        }`}
+                      >
+                        {scanResult.isReturn ? (
+                          <AlertCircle className="w-8 h-8" />
+                        ) : scanResult.success ? (
+                          <CheckCircle2 className="w-8 h-8" />
+                        ) : (
+                          <AlertCircle className="w-8 h-8" />
+                        )}
+                      </div>
+                      <div>
+                        <h3
+                          className={`text-lg font-black tracking-tight ${
+                            scanResult.isReturn
+                              ? "text-orange-700"
+                              : scanResult.success
+                                ? "text-emerald-700"
+                                : "text-red-700"
+                          }`}
+                        >
+                          {scanResult.title}
+                        </h3>
+                        <p
+                          className={`text-sm mt-1 font-semibold ${
+                            scanResult.isReturn
+                              ? "text-orange-600"
+                              : scanResult.success
+                                ? "text-emerald-600"
+                                : "text-red-600"
+                          }`}
+                        >
+                          {scanResult.message}
+                        </p>
+                      </div>
+                    </div>
                   </div>
 
                   {/* THÔNG TIN VÀ HÀNH ĐỘNG BỔ SUNG CHO INBOUND */}
@@ -530,19 +568,70 @@ export default function StationPage() {
                         )}
 
                         {/* Grid Nút bấm mở rộng */}
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                           <button
-                            onClick={() =>
+                            onClick={() => {
+                              if (scanResult.hasUpdatedWeight) {
+                                setScanResult({
+                                  ...scanResult,
+                                  hasUpdatedWeight: false,
+                                });
+                              }
                               window.open(
                                 `/api/orders/${scanResult.orderIds![0]}/label`,
                                 "_blank",
-                              )
-                            }
-                            className="flex items-center justify-center gap-2 py-2 px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer shadow-sm"
+                              );
+                            }}
+                            className={`flex items-center justify-center gap-2 py-2 px-3 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer shadow-sm ${
+                              scanResult.hasUpdatedWeight
+                                ? "bg-red-500 hover:bg-red-600 animate-pulse border-2 border-red-700"
+                                : "bg-blue-600 hover:bg-blue-700"
+                            }`}
                           >
                             <Printer className="w-3.5 h-3.5" />
-                            In nhãn ({scanResult.orderIds.length})
+                            {scanResult.hasUpdatedWeight
+                              ? "BẮT BUỘC IN LẠI"
+                              : `In nhãn (${scanResult.orderIds!.length})`}
                           </button>
+
+                          <button
+                            onClick={async () => {
+                              const newWeight = prompt(
+                                "Nhập cân nặng thực tế (kg):",
+                                "1",
+                              );
+                              if (!newWeight || isNaN(Number(newWeight)))
+                                return;
+
+                              try {
+                                await api.patch(
+                                  `/orders/${scanResult.orderIds![0]}/dimensions`,
+                                  {
+                                    weight: Number(newWeight),
+                                  },
+                                );
+                                setScanResult({
+                                  ...scanResult,
+                                  hasUpdatedWeight: true,
+                                });
+                                alert(
+                                  "Cập nhật cân nặng và tính lại phí thành công!",
+                                );
+                              } catch (err: unknown) {
+                                const apiError = err as { response?: { data?: { message?: string } }; message?: string };
+                                alert(
+                                  "Lỗi khi cập nhật cân nặng: " +
+                                    (apiError.response?.data?.message ||
+                                      apiError.message),
+                                );
+                              }
+                            }}
+                            className="flex items-center justify-center gap-2 py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer shadow-sm"
+                          >
+                            <Scan className="w-3.5 h-3.5" />
+                            Sửa Cân nặng
+                          </button>
+
                           <button
                             onClick={() => {
                               alert(
@@ -579,13 +668,10 @@ export default function StationPage() {
                                       ),
                                     )
                                       .then(() => alert("Xếp kệ thành công!"))
-                                      .catch((err) =>
-                                        alert(
-                                          "Lỗi xếp kệ: " +
-                                            (err.response?.data?.message ||
-                                              err.message),
-                                        ),
-                                      );
+                                      .catch((err: unknown) => {
+                                        const apiError = err as { response?: { data?: { message?: string } }; message?: string };
+                                        alert("Lỗi xếp kệ: " + (apiError.response?.data?.message || apiError.message));
+                                      });
                                     e.currentTarget.value = "";
                                   }
                                 }

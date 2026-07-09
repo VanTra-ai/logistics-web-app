@@ -77,6 +77,11 @@ export default function DashboardLayout({
           icon: AlertTriangle,
         },
         {
+          name: "Khiếu nại (Tickets)",
+          href: "/dashboard/tickets",
+          icon: AlertCircle,
+        },
+        {
           name: "Ví / Đối soát",
           href: "/dashboard/finance/wallets",
           icon: Wallet,
@@ -113,6 +118,11 @@ export default function DashboardLayout({
           name: "Quản lý Sự cố",
           href: "/dashboard/incidents",
           icon: AlertTriangle,
+        },
+        {
+          name: "Khiếu nại (Tickets)",
+          href: "/dashboard/tickets",
+          icon: AlertCircle,
         },
         {
           name: "Sự cố & Ngoại lệ",
@@ -157,6 +167,11 @@ export default function DashboardLayout({
           name: "Quản lý Đơn hàng",
           href: "/dashboard/orders",
           icon: Package,
+        },
+        {
+          name: "Hỗ trợ & Khiếu nại",
+          href: "/dashboard/tickets",
+          icon: AlertCircle,
         },
       ];
     }
