@@ -11,6 +11,8 @@ import {
   CheckCircle2,
   AlertCircle,
   Scale,
+  History,
+  Store,
 } from "lucide-react";
 import api from "@/lib/axios";
 import axios from "axios";
@@ -19,14 +21,30 @@ interface TariffConfig {
   base_price_distance: number;
   base_distance_limit: number;
   block_price_distance: number;
+  surplus_weight_price: number;
+  volumetric_divisor: number;
   cod_fee_percent: number;
   hub_commission_percent: number;
   shipper_payout_flat: number;
   shipper_payout_percent: number;
 }
 
+interface Hub {
+  id: string;
+  name: string;
+}
+
+interface AuditLog {
+  id: string;
+  changed_fields: Record<string, { old: string | number | null; new: string | number | null }>;
+  changed_by?: { full_name: string };
+  created_at: string;
+}
+
 export default function FinanceTariffPage() {
-  const [activeTab, setActiveTab] = useState<"TARIFF" | "COMMISSION">("TARIFF");
+  const [activeTab, setActiveTab] = useState<
+    "TARIFF" | "COMMISSION" | "AUDITS"
+  >("TARIFF");
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitLoading, setIsSubmitLoading] = useState(false);
   const [notification, setNotification] = useState<{
@@ -34,26 +52,62 @@ export default function FinanceTariffPage() {
     message: string;
   } | null>(null);
 
+  const [hubs, setHubs] = useState<Hub[]>([]);
+  const [selectedHubId, setSelectedHubId] = useState<string>("DEFAULT");
+  const [audits, setAudits] = useState<AuditLog[]>([]);
+  const [userRole, setUserRole] = useState<string>("HUB_COORDINATOR");
+
   const [config, setConfig] = useState<TariffConfig>({
     base_price_distance: 15000,
     base_distance_limit: 2,
     block_price_distance: 4000,
+    surplus_weight_price: 5000,
+    volumetric_divisor: 5000,
     cod_fee_percent: 1.0,
     hub_commission_percent: 15.0,
     shipper_payout_flat: 3500,
     shipper_payout_percent: 10.0,
   });
 
+  useEffect(() => {
+    const init = async () => {
+      await Promise.resolve(); // Prevent synchronous setState warning
+      const userStr = localStorage.getItem("user");
+      if (userStr) {
+        try {
+          setUserRole(JSON.parse(userStr).role);
+        } catch {}
+      }
+      try {
+        const res = await api.get("/hubs");
+        const data = res.data?.data || res.data || [];
+        setHubs(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.warn("Lỗi tải danh sách bưu cục.", err);
+      }
+    };
+    init();
+  }, []);
+
   const loadConfig = async () => {
     setIsLoading(true);
     setNotification(null);
     try {
-      const res = await api.get("/finance/tariff");
-      if (res.data?.data) {
-        setConfig(res.data.data);
-      } else if (res.data) {
-        setConfig(res.data);
+      const query =
+        selectedHubId === "DEFAULT" ? "" : `?hub_id=${selectedHubId}`;
+      const [tariffRes, auditRes] = await Promise.all([
+        api.get(`/finance/tariff${query}`),
+        api.get(`/finance/tariff/audits${query}`),
+      ]);
+
+      if (tariffRes.data?.data) {
+        setConfig(tariffRes.data.data);
+      } else if (tariffRes.data) {
+        setConfig(tariffRes.data);
       }
+
+      const auditsData = auditRes.data?.data || auditRes.data || [];
+      setAudits(Array.isArray(auditsData) ? auditsData : []);
     } catch (err) {
       console.warn("Lỗi tải cấu hình tài chính từ backend.", err);
       if (axios.isAxiosError(err) && err.response?.status === 403) {
@@ -72,20 +126,29 @@ export default function FinanceTariffPage() {
       loadConfig();
     }, 0);
     return () => clearTimeout(timer);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedHubId]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (userRole !== "ADMIN") return;
+
     setIsSubmitLoading(true);
     setNotification(null);
 
     try {
-      await api.patch("/finance/tariff", {
+      const query =
+        selectedHubId === "DEFAULT" ? "" : `?hub_id=${selectedHubId}`;
+      await api.patch(`/finance/tariff${query}`, {
         base_price_distance: Math.round(Number(config.base_price_distance)),
         base_distance_limit: Number(
           Number(config.base_distance_limit).toFixed(2),
         ),
         block_price_distance: Math.round(Number(config.block_price_distance)),
+        surplus_weight_price: Math.round(Number(config.surplus_weight_price)),
+        volumetric_divisor: Number(
+          Number(config.volumetric_divisor).toFixed(2),
+        ),
         cod_fee_percent: Number(Number(config.cod_fee_percent).toFixed(2)),
         hub_commission_percent: Number(
           Number(config.hub_commission_percent).toFixed(2),
@@ -99,6 +162,7 @@ export default function FinanceTariffPage() {
         type: "success",
         message: "Đã lưu cấu hình tài chính & biểu phí thành công!",
       });
+      loadConfig(); // Reload to get new audit logs
     } catch (err: unknown) {
       const apiError = err as { response?: { data?: { message?: string } } };
       setNotification({
@@ -111,10 +175,10 @@ export default function FinanceTariffPage() {
     }
   };
 
+  const isReadOnly = userRole !== "ADMIN";
+
   return (
     <div className="space-y-6 animate-fadeIn">
-      {/* Demo Warning */}
-
       {/* Floating Notification */}
       {notification && (
         <div
@@ -158,10 +222,10 @@ export default function FinanceTariffPage() {
           </div>
         </div>
 
-        <div className="flex bg-slate-100 p-1.5 rounded-xl border border-slate-200 text-xs">
+        <div className="flex bg-slate-100 p-1.5 rounded-xl border border-slate-200 text-xs overflow-x-auto">
           <button
             onClick={() => setActiveTab("TARIFF")}
-            className={`px-4 py-2 font-bold rounded-lg transition-all cursor-pointer ${
+            className={`px-4 py-2 font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap ${
               activeTab === "TARIFF"
                 ? "bg-white text-blue-700 shadow-sm"
                 : "text-slate-500 hover:text-slate-800"
@@ -171,7 +235,7 @@ export default function FinanceTariffPage() {
           </button>
           <button
             onClick={() => setActiveTab("COMMISSION")}
-            className={`px-4 py-2 font-bold rounded-lg transition-all cursor-pointer ${
+            className={`px-4 py-2 font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap ${
               activeTab === "COMMISSION"
                 ? "bg-white text-blue-700 shadow-sm"
                 : "text-slate-500 hover:text-slate-800"
@@ -179,7 +243,41 @@ export default function FinanceTariffPage() {
           >
             Hoa hồng & Chiết khấu
           </button>
+          <button
+            onClick={() => setActiveTab("AUDITS")}
+            className={`px-4 py-2 font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap flex items-center gap-1 ${
+              activeTab === "AUDITS"
+                ? "bg-white text-blue-700 shadow-sm"
+                : "text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            <History className="w-3.5 h-3.5" /> Lịch sử
+          </button>
         </div>
+      </div>
+
+      {/* Franchise Pricing Selector */}
+      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-center gap-4">
+        <div className="flex items-center gap-2 text-sm font-bold text-slate-700 whitespace-nowrap">
+          <Store className="w-4 h-4 text-blue-600" /> Chọn bảng giá:
+        </div>
+        <select
+          className="w-full md:w-auto flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 text-sm font-medium"
+          value={selectedHubId}
+          onChange={(e) => setSelectedHubId(e.target.value)}
+        >
+          <option value="DEFAULT">Bảng giá chung (Mặc định hệ thống)</option>
+          {hubs.map((hub) => (
+            <option key={hub.id} value={hub.id}>
+              Bảng giá riêng: {hub.name}
+            </option>
+          ))}
+        </select>
+        {isReadOnly && (
+          <span className="text-xs font-semibold text-amber-600 bg-amber-50 px-3 py-1 rounded-full border border-amber-200 flex-shrink-0">
+            Chỉ xem (Read-only)
+          </span>
+        )}
       </div>
 
       {isLoading ? (
@@ -210,7 +308,8 @@ export default function FinanceTariffPage() {
                       <input
                         type="number"
                         min="0"
-                        className="block w-full px-4 py-2.5 bg-slate-50 border border-slate-200 text-slate-800 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 text-xs font-semibold"
+                        disabled={isReadOnly}
+                        className="block w-full px-4 py-2.5 bg-slate-50 border border-slate-200 text-slate-800 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 text-xs font-semibold disabled:opacity-70 disabled:cursor-not-allowed"
                         value={config.base_price_distance}
                         onChange={(e) =>
                           setConfig({
@@ -237,7 +336,8 @@ export default function FinanceTariffPage() {
                         type="number"
                         min="0"
                         step="0.1"
-                        className="block w-full px-4 py-2.5 bg-slate-50 border border-slate-200 text-slate-800 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 text-xs font-semibold"
+                        disabled={isReadOnly}
+                        className="block w-full px-4 py-2.5 bg-slate-50 border border-slate-200 text-slate-800 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 text-xs font-semibold disabled:opacity-70 disabled:cursor-not-allowed"
                         value={config.base_distance_limit}
                         onChange={(e) =>
                           setConfig({
@@ -255,15 +355,16 @@ export default function FinanceTariffPage() {
                     </p>
                   </div>
 
-                  <div className="md:col-span-2">
+                  <div>
                     <label className="block text-xs font-bold text-slate-550 mb-1.5 uppercase">
-                      Đơn giá km tiếp theo (Block)
+                      Đơn giá km tiếp theo
                     </label>
                     <div className="relative">
                       <input
                         type="number"
                         min="0"
-                        className="block w-full px-4 py-2.5 bg-slate-50 border border-slate-200 text-slate-800 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 text-xs font-semibold"
+                        disabled={isReadOnly}
+                        className="block w-full px-4 py-2.5 bg-slate-50 border border-slate-200 text-slate-800 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 text-xs font-semibold disabled:opacity-70 disabled:cursor-not-allowed"
                         value={config.block_price_distance}
                         onChange={(e) =>
                           setConfig({
@@ -277,8 +378,34 @@ export default function FinanceTariffPage() {
                       </span>
                     </div>
                     <p className="text-[10px] text-slate-400 mt-1">
-                      Đơn giá cộng thêm cho mỗi kilômét hoặc kilôgam vượt mức cơ
-                      bản.
+                      Cộng thêm cho mỗi km vượt mức cơ bản.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-550 mb-1.5 uppercase">
+                      Giá mỗi kg phụ trội
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="0"
+                        disabled={isReadOnly}
+                        className="block w-full px-4 py-2.5 bg-slate-50 border border-slate-200 text-slate-800 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 text-xs font-semibold disabled:opacity-70 disabled:cursor-not-allowed"
+                        value={config.surplus_weight_price || 5000}
+                        onChange={(e) =>
+                          setConfig({
+                            ...config,
+                            surplus_weight_price: Number(e.target.value),
+                          })
+                        }
+                      />
+                      <span className="absolute inset-y-0 right-4 flex items-center text-[10px] text-slate-400 font-bold">
+                        VNĐ / KG
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      Cộng thêm cho mỗi kg vượt mức cơ bản.
                     </p>
                   </div>
                 </div>
@@ -286,28 +413,53 @@ export default function FinanceTariffPage() {
 
               {/* Side Info & Surcharges */}
               <div className="space-y-6">
-                {/* Surcharges Card */}
                 <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
                   <h2 className="text-sm font-bold text-slate-800 flex items-center gap-2 border-b border-slate-100 pb-3">
                     <Settings className="w-4 h-4 text-indigo-650" />
                     Phụ phí & Quy đổi thể tích
                   </h2>
 
-                  <div className="p-3.5 bg-slate-50 border border-slate-150 rounded-xl text-xs space-y-2">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-550 mb-1.5 uppercase">
+                      Hệ số quy đổi thể tích
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="1"
+                        disabled={isReadOnly}
+                        className="block w-full px-4 py-2.5 bg-slate-50 border border-slate-200 text-slate-800 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 text-xs font-semibold disabled:opacity-70 disabled:cursor-not-allowed"
+                        value={config.volumetric_divisor || 5000}
+                        onChange={(e) =>
+                          setConfig({
+                            ...config,
+                            volumetric_divisor: Number(e.target.value),
+                          })
+                        }
+                      />
+                      <span className="absolute inset-y-0 right-4 flex items-center text-[10px] text-slate-400 font-bold">
+                        DIVISOR
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-450 mt-1">
+                      Ví dụ: 4000, 5000, 6000.
+                    </p>
+                  </div>
+
+                  <div className="p-3.5 bg-slate-50 border border-slate-150 rounded-xl text-xs space-y-2 mt-2">
                     <div className="flex justify-between items-center text-[11px] font-bold text-slate-500">
                       <span>CÔNG THỨC QUY ĐỔI THỂ TÍCH</span>
                     </div>
                     <div className="font-mono text-xs text-indigo-750 bg-indigo-50/50 p-2.5 rounded-lg text-center font-bold">
-                      (Dài x Rộng x Cao) / 5000
+                      (Dài x Rộng x Cao) / {config.volumetric_divisor || 5000}
                     </div>
                     <p className="text-[10px] text-slate-400 leading-relaxed">
                       Các đơn hàng cồng kềnh có khối lượng quy đổi lớn hơn cân
-                      nặng thực tế sẽ được tính cước theo khối lượng quy đổi thể
-                      tích này.
+                      nặng thực tế sẽ được tính cước theo khối lượng này.
                     </p>
                   </div>
 
-                  <div className="space-y-3.5">
+                  <div className="space-y-3.5 mt-4">
                     <div>
                       <label className="block text-xs font-bold text-slate-550 mb-1.5 uppercase">
                         Tỷ lệ phí dịch vụ thu hộ COD
@@ -317,7 +469,8 @@ export default function FinanceTariffPage() {
                           type="number"
                           step="0.01"
                           min="0"
-                          className="block w-full px-4 py-2.5 bg-slate-50 border border-slate-200 text-slate-800 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 text-xs font-semibold"
+                          disabled={isReadOnly}
+                          className="block w-full px-4 py-2.5 bg-slate-50 border border-slate-200 text-slate-800 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 text-xs font-semibold disabled:opacity-70 disabled:cursor-not-allowed"
                           value={config.cod_fee_percent}
                           onChange={(e) =>
                             setConfig({
@@ -354,12 +507,14 @@ export default function FinanceTariffPage() {
                   <label className="block text-xs font-bold text-slate-550 mb-1.5 uppercase">
                     Tỷ lệ chia sẻ doanh thu (Hub Commission)
                   </label>
-                  <div className="relative">
+                  <div className="flex items-center gap-4">
                     <input
-                      type="number"
+                      type="range"
                       min="0"
                       max="100"
-                      className="block w-full px-4 py-2.5 bg-slate-50 border border-slate-200 text-slate-800 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 text-xs font-semibold"
+                      step="0.5"
+                      disabled={isReadOnly}
+                      className="flex-1 accent-emerald-600 disabled:opacity-70"
                       value={config.hub_commission_percent}
                       onChange={(e) =>
                         setConfig({
@@ -368,17 +523,33 @@ export default function FinanceTariffPage() {
                         })
                       }
                     />
-                    <span className="absolute inset-y-0 right-4 flex items-center text-[10px] text-slate-400 font-bold">
-                      %
-                    </span>
+                    <div className="w-20 relative">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        disabled={isReadOnly}
+                        className="block w-full px-3 py-2 bg-slate-50 border border-slate-200 text-slate-800 rounded-lg outline-none focus:ring-2 focus:ring-emerald-500/20 text-xs font-bold disabled:opacity-70"
+                        value={config.hub_commission_percent}
+                        onChange={(e) =>
+                          setConfig({
+                            ...config,
+                            hub_commission_percent: Number(e.target.value),
+                          })
+                        }
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-bold">
+                        %
+                      </span>
+                    </div>
                   </div>
-                  <p className="text-[10px] text-slate-450 mt-1">
+                  <p className="text-[10px] text-slate-450 mt-2">
                     Phần trăm cước phí vận chuyển được ghi nhận doanh thu cho
                     bưu cục nhượng quyền quản lý đơn.
                   </p>
                 </div>
 
-                <div className="p-3.5 bg-emerald-50/50 border border-emerald-150 text-xs rounded-xl space-y-1.5">
+                <div className="p-3.5 bg-emerald-50/50 border border-emerald-150 text-xs rounded-xl space-y-1.5 mt-4">
                   <span className="font-extrabold text-emerald-800 block uppercase text-[10px]">
                     Cơ chế ghi nhận doanh thu đối tác:
                   </span>
@@ -407,7 +578,8 @@ export default function FinanceTariffPage() {
                       <input
                         type="number"
                         min="0"
-                        className="block w-full px-4 py-2.5 bg-slate-50 border border-slate-200 text-slate-800 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 text-xs font-semibold"
+                        disabled={isReadOnly}
+                        className="block w-full px-4 py-2.5 bg-slate-50 border border-slate-200 text-slate-800 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 text-xs font-semibold disabled:opacity-70 disabled:cursor-not-allowed"
                         value={config.shipper_payout_flat}
                         onChange={(e) =>
                           setConfig({
@@ -427,14 +599,15 @@ export default function FinanceTariffPage() {
 
                   <div>
                     <label className="block text-xs font-bold text-slate-550 mb-1.5 uppercase">
-                      Tỷ lệ theo phí ship (Percent)
+                      Tỷ lệ theo phí ship (%)
                     </label>
                     <div className="relative">
                       <input
                         type="number"
                         min="0"
                         max="100"
-                        className="block w-full px-4 py-2.5 bg-slate-50 border border-slate-200 text-slate-800 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 text-xs font-semibold"
+                        disabled={isReadOnly}
+                        className="block w-full px-4 py-2.5 bg-slate-50 border border-slate-200 text-slate-800 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 text-xs font-semibold disabled:opacity-70 disabled:cursor-not-allowed"
                         value={config.shipper_payout_percent}
                         onChange={(e) =>
                           setConfig({
@@ -453,7 +626,7 @@ export default function FinanceTariffPage() {
                   </div>
                 </div>
 
-                <div className="p-3.5 bg-blue-50/50 border border-blue-150 text-xs rounded-xl space-y-1.5">
+                <div className="p-3.5 bg-blue-50/50 border border-blue-150 text-xs rounded-xl space-y-1.5 mt-4">
                   <span className="font-extrabold text-blue-800 block uppercase text-[10px]">
                     Cơ chế ví tiền tài xế:
                   </span>
@@ -470,26 +643,116 @@ export default function FinanceTariffPage() {
             </div>
           )}
 
+          {/* TAB 3: AUDITS */}
+          {activeTab === "AUDITS" && (
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="p-5 border-b border-slate-100 flex items-center gap-3 bg-slate-50/50">
+                <History className="w-5 h-5 text-indigo-600" />
+                <h2 className="text-sm font-bold text-slate-800">
+                  Lịch sử thay đổi Biểu phí & Hoa hồng
+                </h2>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-slate-50 text-slate-500 text-xs uppercase font-semibold">
+                    <tr>
+                      <th className="px-5 py-3 border-b border-slate-200">
+                        Thời gian
+                      </th>
+                      <th className="px-5 py-3 border-b border-slate-200">
+                        Người thay đổi
+                      </th>
+                      <th className="px-5 py-3 border-b border-slate-200">
+                        Bưu cục
+                      </th>
+                      <th className="px-5 py-3 border-b border-slate-200">
+                        Chi tiết thay đổi
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {audits.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={4}
+                          className="px-5 py-8 text-center text-slate-400 text-sm"
+                        >
+                          Chưa có lịch sử thay đổi nào.
+                        </td>
+                      </tr>
+                    ) : (
+                      audits.map((audit) => (
+                        <tr
+                          key={audit.id}
+                          className="hover:bg-slate-50/50 transition-colors"
+                        >
+                          <td className="px-5 py-3 text-slate-700 whitespace-nowrap">
+                            {new Date(audit.created_at).toLocaleString("vi-VN")}
+                          </td>
+                          <td className="px-5 py-3 font-semibold text-blue-700">
+                            {audit.changed_by?.full_name || "Hệ thống"}
+                          </td>
+                          <td className="px-5 py-3">
+                            <span className="px-2 py-1 bg-slate-100 text-slate-600 rounded-md text-xs font-mono font-medium">
+                              {selectedHubId === "DEFAULT"
+                                ? "Mặc định"
+                                : selectedHubId.substring(0, 8)}
+                            </span>
+                          </td>
+                          <td className="px-5 py-3">
+                            <div className="space-y-1.5">
+                              {Object.entries(audit.changed_fields || {}).map(
+                                ([key, value]) => (
+                                  <div
+                                    key={key}
+                                    className="text-[11px] flex flex-wrap items-center gap-1.5"
+                                  >
+                                    <span className="font-semibold text-slate-600 w-32 truncate">
+                                      {key}:
+                                    </span>
+                                    <span className="text-red-500 line-through decoration-red-300">
+                                      {value.old}
+                                    </span>
+                                    <span className="text-slate-400">→</span>
+                                    <span className="text-emerald-600 font-bold bg-emerald-50 px-1.5 py-0.5 rounded">
+                                      {value.new}
+                                    </span>
+                                  </div>
+                                ),
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           {/* Form Actions */}
-          <div className="flex justify-end gap-3 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-            <button
-              type="button"
-              onClick={loadConfig}
-              className="px-4 py-2 border border-slate-250 text-slate-700 text-xs font-semibold rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
-            >
-              Đặt lại
-            </button>
-            <button
-              type="submit"
-              disabled={isSubmitLoading}
-              className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition-all active:scale-[0.98] disabled:opacity-50"
-            >
-              <Save className="w-4 h-4" />
-              {isSubmitLoading
-                ? "Đang lưu cấu hình..."
-                : "Lưu cấu hình hệ thống"}
-            </button>
-          </div>
+          {!isReadOnly && activeTab !== "AUDITS" && (
+            <div className="flex justify-end gap-3 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm sticky bottom-4 z-10">
+              <button
+                type="button"
+                onClick={loadConfig}
+                className="px-4 py-2 border border-slate-250 text-slate-700 text-xs font-semibold rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
+              >
+                Tải lại
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmitLoading}
+                className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition-all active:scale-[0.98] disabled:opacity-50"
+              >
+                <Save className="w-4 h-4" />
+                {isSubmitLoading
+                  ? "Đang lưu cấu hình..."
+                  : "Lưu cấu hình hệ thống"}
+              </button>
+            </div>
+          )}
         </form>
       )}
     </div>

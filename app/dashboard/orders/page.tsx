@@ -95,8 +95,11 @@ export default function OrdersManagementPage() {
   const [hubs, setHubs] = useState<Hub[]>([]);
   const [shippers, setShippers] = useState<Shipper[]>([]);
   const [tariff, setTariff] = useState<{
-    base_rate: number;
-    step_rate: number;
+    base_price_distance: number;
+    base_distance_limit: number;
+    block_price_distance: number;
+    surplus_weight_price: number;
+    volumetric_divisor: number;
     cod_fee_percent: number;
   } | null>(null);
 
@@ -164,6 +167,19 @@ export default function OrdersManagementPage() {
     capacity_weight: 1000,
   });
   const [isSubmitLoading, setIsSubmitLoading] = useState(false);
+
+  // Re-fetch tariff when pickup hub changes
+  useEffect(() => {
+    if (orderForm.pickup_hub_id) {
+      api
+        .get(`/finance/tariff?hub_id=${orderForm.pickup_hub_id}`)
+        .then((res) => {
+          const data = res.data?.data || res.data;
+          if (data) setTariff(data);
+        })
+        .catch((err) => console.warn("Lỗi tải tariff của bưu cục", err));
+    }
+  }, [orderForm.pickup_hub_id]);
 
   // Print Label Handler
   const handlePrintLabel = async (orderId: string) => {
@@ -1726,16 +1742,24 @@ export default function OrdersManagementPage() {
                 {(() => {
                   let fee = 0;
                   if (tariff) {
-                    const weightBase = Number(tariff.base_rate) || 0;
-                    const stepRate = Number(tariff.step_rate) || 0;
+                    const length = Number(orderForm.length) || 0;
+                    const width = Number(orderForm.width) || 0;
+                    const height = Number(orderForm.height) || 0;
+                    const divisor = Number(tariff.volumetric_divisor) || 5000;
+                    const bulkWeight = divisor > 0 ? (length * width * height) / divisor : 0;
+                    const chargeableWeight = Math.max(Number(orderForm.weight) || 0, bulkWeight);
+                    
+                    const distance = 5;
+                    const extraDistance = Math.max(0, distance - Number(tariff.base_distance_limit || 2));
+                    const baseShippingPrice =
+                      Number(tariff.base_price_distance || 0) + extraDistance * Number(tariff.block_price_distance || 0);
+                
+                    const surplusPrice = Number(tariff.surplus_weight_price) || 5000;
+                    const weightFee = baseShippingPrice + Math.max(0, chargeableWeight - 2) * surplusPrice;
+                    
                     const codFeePercent = Number(tariff.cod_fee_percent) || 0;
-
-                    const codFee = (orderForm.cod_amount * codFeePercent) / 100;
-                    const extraWeight = Math.max(
-                      0,
-                      Math.ceil(orderForm.weight - 1),
-                    );
-                    const weightFee = weightBase + extraWeight * stepRate;
+                    const codFee = ((Number(orderForm.cod_amount) || 0) * codFeePercent) / 100;
+                    
                     fee = weightFee + codFee;
                   }
                   return (
