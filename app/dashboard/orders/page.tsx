@@ -140,6 +140,11 @@ export default function OrdersManagementPage() {
   const [ordersToAssignIds, setOrdersToAssignIds] = useState<string[]>([]);
   const [assignShipmentId, setAssignShipmentId] = useState("");
 
+  const [isAssignShipperModalOpen, setIsAssignShipperModalOpen] =
+    useState(false);
+  const [orderToAssignShipper, setOrderToAssignShipper] = useState("");
+  const [selectedShipperId, setSelectedShipperId] = useState("");
+
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
 
   // Form states - Order
@@ -535,26 +540,6 @@ export default function OrdersManagementPage() {
     }
   };
 
-  const handleQuickScanOut = async (trackingNum: string, shipperId: string) => {
-    try {
-      await api.post("/orders/scan-out", {
-        tracking_numbers: [trackingNum],
-        shipper_id: shipperId,
-      });
-      setNotification({
-        type: "success",
-        message: `Đã xuất kho bàn giao shipper cho đơn ${trackingNum}!`,
-      });
-      await loadCoreData();
-    } catch (err: unknown) {
-      const apiError = err as { response?: { data?: { message?: string } } };
-      setNotification({
-        type: "error",
-        message: apiError.response?.data?.message || "Lỗi xuất kho!",
-      });
-    }
-  };
-
   const handleQuickRetry = async (orderId: string) => {
     try {
       await api.patch(`/orders/${orderId}/retry`, {
@@ -649,6 +634,28 @@ export default function OrdersManagementPage() {
       setNotification({
         type: "error",
         message: apiError.response?.data?.message || "Lỗi gom nhóm đơn hàng!",
+      });
+    } finally {
+      setIsSubmitLoading(false);
+    }
+  };
+
+  const handleAssignShipperSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!orderToAssignShipper || !selectedShipperId) return;
+    setIsSubmitLoading(true);
+    try {
+      await api.patch(`/orders/${orderToAssignShipper}/assign`, {
+        shipper_id: selectedShipperId,
+      });
+      setNotification({ type: "success", message: "Gán Shipper thành công!" });
+      setIsAssignShipperModalOpen(false);
+      await loadCoreData();
+    } catch (err: unknown) {
+      const apiError = err as { response?: { data?: { message?: string } } };
+      setNotification({
+        type: "error",
+        message: apiError.response?.data?.message || "Lỗi khi gán Shipper.",
       });
     } finally {
       setIsSubmitLoading(false);
@@ -799,8 +806,11 @@ export default function OrdersManagementPage() {
         return "bg-purple-50 text-purple-700 border-purple-200";
       case "FINISHED":
         return "bg-emerald-50 text-emerald-700 border-emerald-250";
-      case "EXCEPTION":
+      case "FAILED":
         return "bg-red-50 text-red-700 border-red-205";
+      case "RETURNING":
+      case "RETURNED":
+        return "bg-orange-50 text-orange-700 border-orange-200";
       default:
         return "bg-slate-50 text-slate-600 border-slate-200";
     }
@@ -809,27 +819,29 @@ export default function OrdersManagementPage() {
   const getStatusLabel = (status: string) => {
     switch (status) {
       case "PENDING":
-        return "Chờ lấy hàng";
+        return "Chờ lấy";
       case "ASSIGNED":
-        return "Đã gán tài xế";
+        return "Đã điều phối";
       case "PICKING":
         return "Đang đi lấy";
       case "PICKED":
         return "Đã lấy hàng";
       case "AT_HUB":
-        return "Đã nhập kho";
+        return "Lưu kho bãi";
       case "IN_TRANSIT":
-        return "Đang trung chuyển";
+        return "Đã đóng bao/Lên tải";
       case "DELIVERING":
-        return "Đang giao hàng";
+        return "Đang giao khách";
       case "FINISHED":
         return "Giao thành công";
       case "FAILED":
-        return "Sự cố/Thất bại";
+        return "Sự cố/Giao thất bại";
       case "CANCELLED":
         return "Đã hủy đơn";
-      case "EXCEPTION":
-        return "Lỗi sự cố";
+      case "RETURNING":
+        return "Chuyển hoàn";
+      case "RETURNED":
+        return "Đã trả hàng";
       default:
         return status;
     }
@@ -969,12 +981,13 @@ export default function OrdersManagementPage() {
                 onChange={(e) => setOrderStatusFilter(e.target.value)}
               >
                 <option value="ALL">Tất cả trạng thái</option>
-                <option value="PENDING">Chờ xử lý</option>
-                <option value="AT_HUB">Đang lưu kho</option>
+                <option value="PENDING">Chờ lấy</option>
+                <option value="AT_HUB">Lưu kho bãi</option>
                 <option value="DELIVERING">Đang giao khách</option>
-                <option value="IN_TRANSIT">Đang trung chuyển</option>
+                <option value="IN_TRANSIT">Đã đóng bao/Lên tải</option>
                 <option value="FINISHED">Giao thành công</option>
-                <option value="EXCEPTION">Sự cố/Tạm giữ</option>
+                <option value="FAILED">Sự cố/Giao thất bại</option>
+                <option value="RETURNING">Chuyển hoàn</option>
               </select>
 
               {/* Hub filter */}
@@ -1150,15 +1163,32 @@ export default function OrdersManagementPage() {
                             currentUser.role !== "SHIPPER" && (
                               <div className="flex items-center justify-end gap-1.5">
                                 {item.current_status === "PENDING" && (
-                                  <button
-                                    onClick={() =>
-                                      handleQuickScanIn(item.tracking_number)
-                                    }
-                                    className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded text-[10px] cursor-pointer"
-                                    title="Quét nhập kho bưu cục bãi lấy hàng"
-                                  >
-                                    Nhập kho bãi
-                                  </button>
+                                  <>
+                                    <button
+                                      onClick={() => {
+                                        setOrderToAssignShipper(item.id);
+                                        setSelectedShipperId(
+                                          shippers.length > 0
+                                            ? shippers[0].id
+                                            : "",
+                                        );
+                                        setIsAssignShipperModalOpen(true);
+                                      }}
+                                      className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 font-bold rounded text-[10px] cursor-pointer"
+                                      title="Gán tài xế đi lấy hàng"
+                                    >
+                                      Gán Shipper đi lấy
+                                    </button>
+                                    <button
+                                      onClick={() =>
+                                        handleQuickScanIn(item.tracking_number)
+                                      }
+                                      className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded text-[10px] cursor-pointer"
+                                      title="Quét nhập kho bưu cục bãi lấy hàng"
+                                    >
+                                      Nhập kho bãi
+                                    </button>
+                                  </>
                                 )}
 
                                 {item.current_status === "AT_HUB" && (
@@ -1172,26 +1202,11 @@ export default function OrdersManagementPage() {
                                       <Truck className="w-3 h-3" />
                                       Gom nhóm xe
                                     </button>
-
-                                    {shippers.length > 0 && (
-                                      <button
-                                        onClick={() =>
-                                          handleQuickScanOut(
-                                            item.tracking_number,
-                                            shippers[0].id,
-                                          )
-                                        }
-                                        className="px-2 py-1 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded text-[10px] cursor-pointer"
-                                        title="Quét bàn giao shipper đi giao"
-                                      >
-                                        Bàn giao Shipper
-                                      </button>
-                                    )}
                                   </>
                                 )}
 
                                 {(item.current_status === "DELIVERING" ||
-                                  item.current_status === "EXCEPTION") && (
+                                  item.current_status === "FAILED") && (
                                   <>
                                     <button
                                       onClick={() => handleQuickRetry(item.id)}
@@ -1746,20 +1761,33 @@ export default function OrdersManagementPage() {
                     const width = Number(orderForm.width) || 0;
                     const height = Number(orderForm.height) || 0;
                     const divisor = Number(tariff.volumetric_divisor) || 5000;
-                    const bulkWeight = divisor > 0 ? (length * width * height) / divisor : 0;
-                    const chargeableWeight = Math.max(Number(orderForm.weight) || 0, bulkWeight);
-                    
+                    const bulkWeight =
+                      divisor > 0 ? (length * width * height) / divisor : 0;
+                    const chargeableWeight = Math.max(
+                      Number(orderForm.weight) || 0,
+                      bulkWeight,
+                    );
+
                     const distance = 5;
-                    const extraDistance = Math.max(0, distance - Number(tariff.base_distance_limit || 2));
+                    const extraDistance = Math.max(
+                      0,
+                      distance - Number(tariff.base_distance_limit || 2),
+                    );
                     const baseShippingPrice =
-                      Number(tariff.base_price_distance || 0) + extraDistance * Number(tariff.block_price_distance || 0);
-                
-                    const surplusPrice = Number(tariff.surplus_weight_price) || 5000;
-                    const weightFee = baseShippingPrice + Math.max(0, chargeableWeight - 2) * surplusPrice;
-                    
+                      Number(tariff.base_price_distance || 0) +
+                      extraDistance * Number(tariff.block_price_distance || 0);
+
+                    const surplusPrice =
+                      Number(tariff.surplus_weight_price) || 5000;
+                    const weightFee =
+                      baseShippingPrice +
+                      Math.max(0, chargeableWeight - 2) * surplusPrice;
+
                     const codFeePercent = Number(tariff.cod_fee_percent) || 0;
-                    const codFee = ((Number(orderForm.cod_amount) || 0) * codFeePercent) / 100;
-                    
+                    const codFee =
+                      ((Number(orderForm.cod_amount) || 0) * codFeePercent) /
+                      100;
+
                     fee = weightFee + codFee;
                   }
                   return (
@@ -2001,6 +2029,68 @@ export default function OrdersManagementPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ASSIGN SHIPPER MODAL */}
+      {isAssignShipperModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                  <User className="w-6 h-6 text-amber-500" />
+                  Gán Shipper Đi Lấy Hàng
+                </h2>
+                <button
+                  onClick={() => setIsAssignShipperModalOpen(false)}
+                  className="p-2 hover:bg-slate-100 rounded-full transition-colors"
+                >
+                  <X className="w-5 h-5 text-slate-500" />
+                </button>
+              </div>
+
+              <form onSubmit={handleAssignShipperSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">
+                    Chọn tài xế (Shipper)
+                  </label>
+                  <select
+                    required
+                    value={selectedShipperId}
+                    onChange={(e) => setSelectedShipperId(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm font-medium text-slate-700"
+                  >
+                    <option value="" disabled>
+                      -- Vui lòng chọn Shipper --
+                    </option>
+                    {shippers.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.full_name} ({s.phone_number})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="pt-4 flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsAssignShipperModalOpen(false)}
+                    className="flex-1 px-4 py-2.5 border border-slate-200 text-slate-600 font-semibold rounded-xl hover:bg-slate-50 transition-colors"
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmitLoading || !selectedShipperId}
+                    className="flex-1 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl transition-colors disabled:opacity-50"
+                  >
+                    {isSubmitLoading ? "Đang xử lý..." : "Xác nhận gán"}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
       )}
