@@ -12,6 +12,9 @@ import {
   Camera,
   CornerDownLeft,
   Volume2,
+  MapPin,
+  Printer,
+  PackageOpen,
 } from "lucide-react";
 import api from "@/lib/axios";
 
@@ -42,6 +45,8 @@ export default function StationPage() {
     title: string;
     message: string;
     timestamp: string;
+    suggestedZone?: string;
+    orderIds?: string[];
   } | null>(null);
   const [flashColor, setFlashColor] = useState<"GREEN" | "RED" | null>(null);
 
@@ -123,11 +128,15 @@ export default function StationPage() {
     const rawValue = (rawCode || trackingInput).trim().toUpperCase();
     if (!rawValue) return;
 
-    const trackingNumbers = Array.from(new Set(rawValue.split(/[\s,]+/).filter((t) => t.length > 0)));
+    const trackingNumbers = Array.from(
+      new Set(rawValue.split(/[\s,]+/).filter((t) => t.length > 0)),
+    );
     if (trackingNumbers.length === 0) return;
 
     // Filter out already processing scans
-    const newScans = trackingNumbers.filter((t) => !processingScans.current.has(t));
+    const newScans = trackingNumbers.filter(
+      (t) => !processingScans.current.has(t),
+    );
     if (newScans.length === 0) {
       console.warn("Tất cả các mã vận đơn đã hoặc đang được xử lý.");
       return;
@@ -158,13 +167,32 @@ export default function StationPage() {
           return;
         }
 
-        await api.post("/orders/scan-in", { tracking_numbers: newScans });
+        const res = await api.post("/orders/scan-in", {
+          tracking_numbers: newScans,
+        });
+
+        let suggestedZone = "Khu vực A (Mặc định)";
+        let orderIds: string[] = [];
+        if (
+          res.data?.success_trackings &&
+          res.data.success_trackings.length > 0
+        ) {
+          const firstValid = res.data.success_trackings[0];
+          if (firstValid.suggested_zone)
+            suggestedZone = firstValid.suggested_zone;
+          orderIds = res.data.success_trackings.map(
+            (t: { order_id: string }) => t.order_id,
+          );
+        }
+
         setFlashColor("GREEN");
         setScanResult({
           success: true,
           title: "NHẬP KHO THÀNH CÔNG",
           message: `${newScans.length} vận đơn đã nhập kho thành công.`,
           timestamp: new Date().toLocaleTimeString(),
+          suggestedZone,
+          orderIds,
         });
       } else {
         // OUTBOUND
@@ -485,7 +513,90 @@ export default function StationPage() {
                     {scanResult.message}
                   </div>
 
-                  <div className="text-[10px] text-slate-400 font-bold text-right">
+                  {/* THÔNG TIN VÀ HÀNH ĐỘNG BỔ SUNG CHO INBOUND */}
+                  {scanResult.success &&
+                    scanMode === "INBOUND" &&
+                    scanResult.orderIds &&
+                    scanResult.orderIds.length > 0 && (
+                      <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 mt-4 space-y-4">
+                        {scanResult.suggestedZone && (
+                          <div className="flex items-center gap-2 text-xs font-medium text-slate-700">
+                            <MapPin className="w-4 h-4 text-blue-500" />
+                            Gợi ý xếp kệ:{" "}
+                            <span className="font-bold text-slate-900">
+                              {scanResult.suggestedZone}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Grid Nút bấm mở rộng */}
+                        <div className="grid grid-cols-2 gap-3">
+                          <button
+                            onClick={() =>
+                              window.open(
+                                `/api/orders/${scanResult.orderIds![0]}/label`,
+                                "_blank",
+                              )
+                            }
+                            className="flex items-center justify-center gap-2 py-2 px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer shadow-sm"
+                          >
+                            <Printer className="w-3.5 h-3.5" />
+                            In nhãn ({scanResult.orderIds.length})
+                          </button>
+                          <button
+                            onClick={() => {
+                              alert(
+                                "Tính năng Đóng gói / Phụ phí đang tích hợp...",
+                              );
+                            }}
+                            className="flex items-center justify-center gap-2 py-2 px-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer shadow-sm"
+                          >
+                            <PackageOpen className="w-3.5 h-3.5" />
+                            Đóng gói
+                          </button>
+                        </div>
+
+                        {/* Xếp kệ (Put-away) */}
+                        <div className="pt-3 border-t border-slate-200">
+                          <label className="block text-[10px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+                            Quét mã kệ để xếp (Put-away)
+                          </label>
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              id="putaway-input"
+                              placeholder="VD: LOC-A-01..."
+                              className="flex-1 text-xs px-3.5 py-2.5 border border-slate-200 rounded-xl outline-none focus:border-blue-500 bg-white focus:ring-2 focus:ring-blue-500/20 transition-all font-mono tracking-widest text-slate-800 font-bold"
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  const val = e.currentTarget.value;
+                                  if (val) {
+                                    Promise.all(
+                                      scanResult.orderIds!.map((id) =>
+                                        api.patch(`/orders/${id}/putaway`, {
+                                          barcode: val,
+                                        }),
+                                      ),
+                                    )
+                                      .then(() => alert("Xếp kệ thành công!"))
+                                      .catch((err) =>
+                                        alert(
+                                          "Lỗi xếp kệ: " +
+                                            (err.response?.data?.message ||
+                                              err.message),
+                                        ),
+                                      );
+                                    e.currentTarget.value = "";
+                                  }
+                                }
+                              }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                  <div className="text-[10px] text-slate-400 font-bold text-right mt-2">
                     Quét lúc: {scanResult.timestamp}
                   </div>
                 </div>

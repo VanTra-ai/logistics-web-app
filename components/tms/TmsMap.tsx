@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 import {
   MapContainer,
@@ -91,27 +91,30 @@ export default function TmsMap({ orders, hubs, shippers }: TmsMapProps) {
   );
 
   const [mapId, setMapId] = useState<string>("");
+  const mapRef = useRef<L.Map | null>(null);
 
   useEffect(() => {
     const id = `tms-map-${Math.random().toString(36).slice(2)}`;
-    // Bypassing synchronous setState in effect rule by wrapping in setTimeout
     const timeoutId = setTimeout(() => {
       setMapId(id);
     }, 0);
 
     return () => {
       clearTimeout(timeoutId);
-      // On unmount, destroy any Leaflet internal state attached to the
-      // container element to allow clean re-initialization on next mount.
-      const container = document.getElementById(id);
-      if (container) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (container as any)._leaflet_id = null;
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      } else {
+        const container = document.getElementById(id);
+        if (container) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (container as any)._leaflet_id = null;
+        }
       }
     };
   }, []);
 
-  if (!mapId) return null;
+  if (typeof window === "undefined" || !mapId) return null;
 
   return (
     <div className="w-full h-full min-h-[500px] z-0 rounded-xl overflow-hidden">
@@ -121,6 +124,7 @@ export default function TmsMap({ orders, hubs, shippers }: TmsMapProps) {
         center={defaultCenter}
         zoom={13}
         style={{ height: "100%", width: "100%", zIndex: 0 }}
+        ref={mapRef}
       >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'

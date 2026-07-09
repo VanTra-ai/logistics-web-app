@@ -18,7 +18,12 @@ type WalletData = {
   id: string;
   cod_debt: number;
   income_balance: number;
-  user?: { id: string; full_name: string; email?: string };
+  user?: {
+    id: string;
+    full_name: string;
+    email?: string;
+    hub?: { id: string; name: string };
+  };
   transactions?: Transaction[];
 };
 
@@ -36,6 +41,8 @@ export default function WalletsPage() {
   const [fetchError, setFetchError] = useState<string | null>(null);
 
   const [searchTerm, setSearchTerm] = useState("");
+  const [selectedHub, setSelectedHub] = useState("ALL");
+  const [hubs, setHubs] = useState<{ id: string; name: string }[]>([]);
   const [selectedWallet, setSelectedWallet] = useState<WalletData | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
@@ -65,10 +72,23 @@ export default function WalletsPage() {
         setIsLoading(false);
       }
     };
+
+    const fetchHubs = async () => {
+      try {
+        const res = await api.get("/hubs");
+        const data = res.data?.data || res.data || [];
+        setHubs(Array.isArray(data) ? data : [data]);
+      } catch (err) {
+        console.error("Lỗi fetch hubs:", err);
+      }
+    };
+
     fetchWallets();
+    fetchHubs();
   }, []);
 
   const filteredWallets = wallets.filter((w) => {
+    if (selectedHub !== "ALL" && w.user?.hub?.id !== selectedHub) return false;
     const name = w.user?.full_name || "";
     return name.toLowerCase().includes(searchTerm.toLowerCase());
   });
@@ -163,15 +183,29 @@ export default function WalletsPage() {
 
       {/* Toolbar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-        <div className="relative w-full sm:max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Tìm kiếm theo tên tài xế..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm"
-          />
+        <div className="flex flex-col sm:flex-row gap-4 w-full sm:max-w-xl">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Tìm kiếm theo tên tài xế..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm"
+            />
+          </div>
+          <select
+            className="px-3 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20 text-sm font-semibold sm:min-w-[180px]"
+            value={selectedHub}
+            onChange={(e) => setSelectedHub(e.target.value)}
+          >
+            <option value="ALL">Tất cả bưu cục</option>
+            {hubs.map((h) => (
+              <option key={h.id} value={h.id}>
+                {h.name}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 

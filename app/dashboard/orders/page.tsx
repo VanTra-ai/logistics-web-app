@@ -798,6 +798,8 @@ export default function OrdersManagementPage() {
         return "Đã gán tài xế";
       case "PICKING":
         return "Đang đi lấy";
+      case "PICKED":
+        return "Đã lấy hàng";
       case "AT_HUB":
         return "Đã nhập kho";
       case "IN_TRANSIT":

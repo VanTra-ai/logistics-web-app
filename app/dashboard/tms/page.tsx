@@ -130,7 +130,7 @@ export default function TMSDashboard() {
             is_online: boolean;
             role: string;
             [key: string]: unknown;
-          }) => u.role === "SHIPPER",
+          }) => u.role === "SHIPPER" && u.is_online,
         );
         setShippers(
           shippersList.map(
