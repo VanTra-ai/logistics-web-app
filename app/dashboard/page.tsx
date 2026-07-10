@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   Package,
@@ -72,8 +72,6 @@ function translateStatus(status: string): string {
   }
 }
 
-
-
 function getStatusColor(status: string): string {
   switch (status) {
     case "PENDING":
@@ -107,12 +105,23 @@ function getStatusBgColor(status: string): string {
 export default function DashboardPage() {
   const router = useRouter();
   const [user, setUser] = useState<LoggedInUser | null>(null);
+  const [hubs, setHubs] = useState<{ id: string; name: string }[]>([]);
+  const [selectedHub, setSelectedHub] = useState<string>("ALL");
 
   const [statsData, setStatsData] = useState<OrderStatItem[]>([]);
   const [recentOrders, setRecentOrders] = useState<OrderData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  useEffect(() => {
+    if (user?.role === "ADMIN") {
+      api
+        .get("/hubs")
+        .then((res) => setHubs(res.data?.data || res.data))
+        .catch(() => {});
+    }
+  }, [user]);
 
   // Load thông tin người dùng từ localStorage
   useEffect(() => {
@@ -258,13 +267,38 @@ export default function DashboardPage() {
   const barChartHeight = 160;
 
   if (user?.role === "HUB_COORDINATOR") {
+    return <CoordinatorDashboard user={user} />;
+  }
+
+  if (user?.role === "ADMIN" && selectedHub !== "ALL") {
     return (
-      <CoordinatorDashboard
-        user={user}
-        onRefresh={() => fetchStatistics(true)}
-        isRefreshing={isRefreshing}
-        recentOrders={recentOrders}
-      />
+      <div className="space-y-6 animate-fadeIn">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-4 rounded-xl shadow-sm border border-slate-200 gap-4">
+          <div>
+            <h2 className="font-bold text-slate-800">Chế độ xem Bưu cục</h2>
+            <p className="text-xs text-slate-500">
+              Bạn đang xem số liệu chi tiết của một bưu cục cụ thể
+            </p>
+          </div>
+          <select
+            value={selectedHub}
+            onChange={(e) => setSelectedHub(e.target.value)}
+            className="border border-slate-200 rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20 bg-slate-50"
+          >
+            <option value="ALL">← Trở về Tổng quan hệ thống</option>
+            {hubs.map((h) => (
+              <option key={h.id} value={h.id}>
+                {h.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <CoordinatorDashboard
+          user={user}
+          adminSelectedHubId={selectedHub}
+          adminSelectedHubName={hubs.find((h) => h.id === selectedHub)?.name}
+        />
+      </div>
     );
   }
 
@@ -280,7 +314,31 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8 animate-fadeIn">
-      {/* Fallback Warning Alert for Demo Mode */}
+      {/* Admin Hub Selector */}
+      {user?.role === "ADMIN" && (
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-4 rounded-xl shadow-sm border border-slate-200 gap-4">
+          <div>
+            <h2 className="font-bold text-slate-800">
+              Bảng điều khiển Tổng Quan
+            </h2>
+            <p className="text-xs text-slate-500">
+              Số liệu trên toàn bộ hệ thống
+            </p>
+          </div>
+          <select
+            value={selectedHub}
+            onChange={(e) => setSelectedHub(e.target.value)}
+            className="border border-slate-200 rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20 bg-slate-50"
+          >
+            <option value="ALL">Toàn hệ thống</option>
+            {hubs.map((h) => (
+              <option key={h.id} value={h.id}>
+                {h.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* Welcome Banner */}
       <div className="relative overflow-hidden bg-gradient-to-r from-slate-900 to-blue-950 rounded-2xl p-6 sm:p-8 border border-slate-800 shadow-lg">
@@ -766,74 +824,145 @@ function ShipperDashboard({
 // COMPONENT DASHBOARD DÀNH RIÊNG CHO NHÂN VIÊN ĐIỀU PHỐI (HUB COORDINATOR)
 interface CoordinatorDashboardProps {
   user: LoggedInUser | null;
-  onRefresh: () => void;
-  isRefreshing: boolean;
-  recentOrders?: OrderData[];
+  adminSelectedHubId?: string;
+  adminSelectedHubName?: string;
+}
+
+interface HubOverview {
+  total: number;
+  waiting_putaway: number;
+  waiting_dispatch: number;
+  sla_overdue: number;
+  delivering: number;
+  locations: {
+    empty_slots: number;
+    occupied_slots: number;
+    full_slots: number;
+    total: number;
+  };
+}
+
+interface HubMonitorShipment {
+  id: string;
+  vehicle_type: string;
+  vehicle_number?: string;
+  tracking_number?: string;
+  status: string;
+  created_at: string;
+  shipper?: { full_name: string; phone?: string };
+  origin_hub?: { name: string };
+  destination_hub?: { name: string };
+}
+
+interface HubMonitor {
+  inbound: HubMonitorShipment[];
+  outbound: HubMonitorShipment[];
 }
 
 function CoordinatorDashboard({
   user,
-  onRefresh,
-  isRefreshing,
+  adminSelectedHubId,
+  adminSelectedHubName,
 }: CoordinatorDashboardProps) {
-  // Trạng thái cục bộ cho bưu cục
-  const hubName = user?.hub?.name || "Bưu cục Cầu Giấy";
+  const [overview, setOverview] = useState<HubOverview | null>(null);
+  const [monitor, setMonitor] = useState<HubMonitor | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Dữ liệu giả lập thời gian thực cho bưu cục
-  const localMetrics = {
-    trucksWaiting: 3,
-    sortingPending: 18,
-    slaOverdue: 2,
-    totalAtHub: 45,
-  };
+  const hubId = adminSelectedHubId || user?.hub?.id;
+  const hubName =
+    adminSelectedHubName || user?.hub?.name || "Bưu cục chưa xác định";
 
-  const outboundShipments = [
-    {
-      id: "ship-101",
-      driver: "Nguyễn Hoàng Nam",
-      phone: "0912345678",
-      vehicle: "29C-888.88",
-      dest: "Bưu cục Hải Phòng",
-      time: "21:30",
-      fill: 85,
-      status: "PENDING",
+  const fetchHubData = useCallback(
+    async (isRef = false) => {
+      if (!hubId) return;
+      await Promise.resolve();
+      if (isRef) setIsRefreshing(true);
+      else setIsLoading(true);
+      try {
+        const [overRes, monRes] = await Promise.all([
+          api.get(`/statistics/hub/overview?hubId=${hubId}`),
+          api.get(`/statistics/hub/shipment-monitor?hubId=${hubId}`),
+        ]);
+        setOverview(overRes.data.data);
+        setMonitor(monRes.data.data);
+      } catch (e) {
+        console.warn("Failed to fetch hub data", e);
+      } finally {
+        setIsLoading(false);
+        setIsRefreshing(false);
+      }
     },
-    {
-      id: "ship-102",
-      driver: "Vũ Văn Bách",
-      phone: "0945678901",
-      vehicle: "30E-999.99",
-      dest: "Bưu cục Đà Nẵng",
-      time: "23:00",
-      fill: 40,
-      status: "PENDING",
-    },
-  ];
+    [hubId],
+  );
 
-  const inboundShipments = [
-    {
-      id: "ship-201",
-      driver: "Trần Văn Luận",
-      vehicle: "15C-123.45",
-      origin: "Bưu cục Hải Phòng",
-      eta: "21:15",
-      status: "IN_TRANSIT",
-    },
-    {
-      id: "ship-202",
-      driver: "Lê Minh Tuấn",
-      vehicle: "51D-543.21",
-      origin: "Bưu cục Quận 1",
-      eta: "22:45",
-      status: "IN_TRANSIT",
-    },
-  ];
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchHubData();
+  }, [fetchHubData]);
+
+  if (!hubId) {
+    return (
+      <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm text-center space-y-3">
+        <AlertCircle className="w-12 h-12 text-slate-400 mx-auto" />
+        <h3 className="text-sm font-bold text-slate-750">
+          Không thể tải dữ liệu bưu cục
+        </h3>
+        <p className="text-xs text-slate-500">
+          Vui lòng kiểm tra lại tài khoản hoặc chọn một bưu cục để xem.
+        </p>
+      </div>
+    );
+  }
+
+  // Calculate donut slices for locations (Warehouse Occupancy)
+  const donutRadius = 50;
+  const donutCircumference = 2 * Math.PI * donutRadius;
+  const totalLoc = overview?.locations?.total || 0;
+
+  let donutSlices: { percentage: string; strokeLength: number; strokeGap: number; strokeOffset: number; status: string; count: number; color: string; label: string; }[] = [];
+  if (totalLoc > 0) {
+    const slices = [
+      {
+        status: "EMPTY",
+        count: overview?.locations.empty_slots || 0,
+        color: "#3B82F6",
+        label: "Trống",
+      },
+      {
+        status: "OCCUPIED",
+        count: overview?.locations.occupied_slots || 0,
+        color: "#F59E0B",
+        label: "Đang chứa",
+      },
+      {
+        status: "FULL",
+        count: overview?.locations.full_slots || 0,
+        color: "#EF4444",
+        label: "Đã đầy",
+      },
+    ];
+
+    let currentOffset = 0;
+    donutSlices = slices.map((slice) => {
+      const percentage = slice.count / totalLoc;
+      const strokeLength = percentage * donutCircumference;
+      const strokeGap = donutCircumference - strokeLength;
+      const offset = currentOffset;
+      currentOffset -= percentage * donutCircumference;
+      return {
+        ...slice,
+        percentage: (percentage * 100).toFixed(1),
+        strokeLength,
+        strokeGap,
+        strokeOffset: offset,
+      };
+    });
+  }
 
   return (
     <div className="space-y-6 animate-fadeIn">
-      {/* Demo Warning */}
-
-      {/* Banner chào mừng */}
+      {/* Banner */}
       <div className="relative overflow-hidden bg-gradient-to-r from-blue-950 to-slate-900 rounded-2xl p-6 sm:p-8 border border-slate-800 shadow-lg">
         <div className="absolute top-0 right-0 w-80 h-80 bg-blue-500/10 rounded-full blur-[100px] pointer-events-none" />
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -846,203 +975,257 @@ function CoordinatorDashboard({
               <span className="text-white font-semibold">
                 {user?.full_name}
               </span>
-              . Bạn đang trực điều hành ca làm việc tại bưu cục.
+              . Bạn đang xem dữ liệu vận hành bưu cục.
             </p>
           </div>
-          <div className="flex gap-2">
-            <button
-              onClick={onRefresh}
-              disabled={isRefreshing}
-              className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs transition-colors cursor-pointer disabled:opacity-50"
-            >
-              <RefreshCw
-                className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`}
-              />
-              Làm mới
-            </button>
-          </div>
+          <button
+            onClick={() => fetchHubData(true)}
+            disabled={isRefreshing || isLoading}
+            className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs transition-colors cursor-pointer disabled:opacity-50"
+          >
+            <RefreshCw
+              className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`}
+            />{" "}
+            Làm mới
+          </button>
         </div>
       </div>
 
-      {/* Grid chỉ số thời gian thực */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Metric 1 */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
-          <div className="p-3 bg-blue-50 text-blue-600 rounded-xl">
-            <Truck className="w-6 h-6" />
-          </div>
-          <div>
-            <span className="text-xs text-slate-500 block font-medium">
-              Xe chờ bốc dỡ
-            </span>
-            <span className="text-xl font-bold text-slate-800">
-              {localMetrics.trucksWaiting} chuyến
-            </span>
-          </div>
+      {isLoading ? (
+        <div className="min-h-[200px] flex justify-center items-center">
+          <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
         </div>
-        {/* Metric 2 */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
-          <div className="p-3 bg-amber-50 text-amber-600 rounded-xl">
-            <Package className="w-6 h-6" />
-          </div>
-          <div>
-            <span className="text-xs text-slate-500 block font-medium">
-              Cần phân loại
-            </span>
-            <span className="text-xl font-bold text-slate-800">
-              {localMetrics.sortingPending} đơn
-            </span>
-          </div>
-        </div>
-        {/* Metric 3 */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
-          <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
-            <CheckCircle2 className="w-6 h-6" />
-          </div>
-          <div>
-            <span className="text-xs text-slate-500 block font-medium">
-              Tổng tồn kho bãi
-            </span>
-            <span className="text-xl font-bold text-slate-800">
-              {localMetrics.totalAtHub} kiện
-            </span>
-          </div>
-        </div>
-        {/* Metric 4 */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
-          <div className="p-3 bg-red-50 text-red-600 rounded-xl">
-            <AlertCircle className="w-6 h-6" />
-          </div>
-          <div>
-            <span className="text-xs text-slate-500 block font-medium">
-              Đọng quá hạn SLA
-            </span>
-            <span className="text-xl font-bold text-red-600">
-              {localMetrics.slaOverdue} đơn
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Timeline Xe tải Inbound & Outbound */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Inbound timeline */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-            <h2 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse" />
-              Chuyến xe đang đến bến (Inbound)
-            </h2>
-            <span className="text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-bold">
-              Thời gian thực
-            </span>
-          </div>
-
-          <div className="space-y-3">
-            {inboundShipments.map((ship) => (
-              <div
-                key={ship.id}
-                className="p-3.5 bg-slate-50 hover:bg-slate-100/70 border border-slate-200 rounded-xl transition-all flex items-center justify-between gap-3 text-xs"
-              >
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-slate-800 text-sm">
-                      {ship.vehicle}
-                    </span>
-                    <span className="px-2 py-0.5 bg-blue-100 text-blue-800 font-semibold rounded text-[10px] uppercase">
-                      {ship.status}
-                    </span>
-                  </div>
-                  <div className="text-slate-500 font-medium">
-                    Từ:{" "}
-                    <span className="text-slate-800 font-bold">
-                      {ship.origin}
-                    </span>
-                  </div>
-                  <div className="text-[10px] text-slate-400">
-                    Tài xế: {ship.driver}
-                  </div>
-                </div>
-                <div className="text-right">
-                  <span className="text-slate-400 block font-medium">
-                    Dự kiến cập bến
-                  </span>
-                  <span className="text-sm font-bold text-blue-600 block mt-0.5">
-                    {ship.eta}
-                  </span>
-                </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Metric 1 */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
+              <div className="p-3 bg-blue-50 text-blue-600 rounded-xl">
+                <Package className="w-6 h-6" />
               </div>
-            ))}
+              <div>
+                <span className="text-xs text-slate-500 block font-medium">
+                  Đang tồn kho (AT_HUB)
+                </span>
+                <span className="text-xl font-bold text-slate-800">
+                  {overview?.waiting_putaway || 0} đơn
+                </span>
+              </div>
+            </div>
+            {/* Metric 2 */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
+              <div className="p-3 bg-amber-50 text-amber-600 rounded-xl">
+                <Clock className="w-6 h-6" />
+              </div>
+              <div>
+                <span className="text-xs text-slate-500 block font-medium">
+                  Chờ lấy (PENDING)
+                </span>
+                <span className="text-xl font-bold text-slate-800">
+                  {overview?.waiting_dispatch || 0} đơn
+                </span>
+              </div>
+            </div>
+            {/* Metric 3 */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
+              <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
+                <CheckCircle2 className="w-6 h-6" />
+              </div>
+              <div>
+                <span className="text-xs text-slate-500 block font-medium">
+                  Đang giao (DELIVERING)
+                </span>
+                <span className="text-xl font-bold text-slate-800">
+                  {overview?.delivering || 0} đơn
+                </span>
+              </div>
+            </div>
+            {/* Metric 4 */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
+              <div className="p-3 bg-red-50 text-red-600 rounded-xl">
+                <AlertCircle className="w-6 h-6" />
+              </div>
+              <div>
+                <span className="text-xs text-slate-500 block font-medium">
+                  Đọng quá hạn SLA
+                </span>
+                <span className="text-xl font-bold text-red-600">
+                  {overview?.sla_overdue || 0} đơn
+                </span>
+              </div>
+            </div>
           </div>
-        </div>
 
-        {/* Outbound timeline */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-            <h2 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-              Chuyến xe chuẩn bị xuất phát (Outbound)
-            </h2>
-            <span className="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-bold">
-              Đang đóng hàng
-            </span>
-          </div>
-
-          <div className="space-y-3">
-            {outboundShipments.map((ship) => (
-              <div
-                key={ship.id}
-                className="p-3.5 bg-slate-50 hover:bg-slate-100/70 border border-slate-200 rounded-xl transition-all space-y-2 text-xs"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-slate-800 text-sm">
-                      {ship.vehicle}
-                    </span>
-                    <span className="px-2 py-0.5 bg-slate-200 text-slate-700 font-semibold rounded text-[10px] uppercase">
-                      {ship.status}
-                    </span>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-slate-400 font-medium mr-1.5">
-                      Xuất phát:
-                    </span>
-                    <span className="font-bold text-slate-800">
-                      {ship.time}
-                    </span>
-                  </div>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Warehouse Occupancy Chart */}
+            <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col items-center">
+              <h2 className="text-sm font-bold text-slate-800 mb-6 w-full text-left">
+                Năng suất Kệ hàng
+              </h2>
+              {totalLoc === 0 ? (
+                <div className="flex-1 flex flex-col justify-center items-center text-center p-4">
+                  <Package className="w-10 h-10 text-slate-300 mb-2" />
+                  <p className="text-sm font-bold text-slate-700">
+                    Chưa có dữ liệu Kệ hàng
+                  </p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Bưu cục này chưa được thiết lập vị trí kệ hàng.
+                  </p>
                 </div>
-                <div className="text-slate-500 font-medium">
-                  Đến:{" "}
-                  <span className="text-slate-800 font-bold">{ship.dest}</span>
-                </div>
-
-                {/* Tỉ lệ lấp đầy xe */}
-                <div className="space-y-1 pt-1">
-                  <div className="flex justify-between text-[10px] text-slate-400 font-semibold">
-                    <span>Tỉ lệ đóng hàng:</span>
-                    <span
-                      className={
-                        ship.fill >= 80
-                          ? "text-emerald-600 font-bold"
-                          : "text-blue-600 font-bold"
-                      }
-                    >
-                      {ship.fill}%
-                    </span>
-                  </div>
-                  <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full transition-all duration-500 ${ship.fill >= 80 ? "bg-emerald-500" : "bg-blue-500"}`}
-                      style={{ width: `${ship.fill}%` }}
+              ) : (
+                <div className="relative w-44 h-44 mb-6">
+                  <svg className="w-full h-full" viewBox="0 0 120 120">
+                    <circle
+                      cx="60"
+                      cy="60"
+                      r={donutRadius}
+                      fill="transparent"
+                      stroke="#F1F5F9"
+                      strokeWidth="12"
                     />
+                    {donutSlices.map((slice) => (
+                      <circle
+                        key={slice.status}
+                        cx="60"
+                        cy="60"
+                        r={donutRadius}
+                        fill="transparent"
+                        stroke={slice.color}
+                        strokeWidth="12"
+                        strokeDasharray={`${slice.strokeLength} ${slice.strokeGap}`}
+                        strokeDashoffset={slice.strokeOffset}
+                        transform="rotate(-90 60 60)"
+                        className="transition-all duration-700 ease-out"
+                      />
+                    ))}
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col justify-center items-center">
+                    <span className="text-2xl font-black text-slate-800 tracking-tight">
+                      {totalLoc}
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                      Vị trí
+                    </span>
                   </div>
                 </div>
+              )}
+              {totalLoc > 0 && (
+                <div className="w-full space-y-3">
+                  {donutSlices.map((slice) => (
+                    <div
+                      key={slice.status}
+                      className="flex justify-between items-center text-xs font-semibold text-slate-700"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`w-3 h-3 rounded-full`}
+                          style={{ backgroundColor: slice.color }}
+                        />
+                        {slice.label}
+                      </div>
+                      <span>
+                        {slice.count} vị trí ({slice.percentage}%)
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Shipments List */}
+            <div className="lg:col-span-2 space-y-6">
+              {/* Inbound */}
+              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse" />{" "}
+                    Xe đang đến bến (Inbound)
+                  </h2>
+                </div>
+                <div className="space-y-3">
+                  {monitor?.inbound?.length === 0 ? (
+                    <p className="text-xs text-slate-500 italic">
+                      Không có xe tải nào đang tới bưu cục.
+                    </p>
+                  ) : null}
+                  {monitor?.inbound?.map((ship: HubMonitorShipment) => (
+                    <div
+                      key={ship.id}
+                      className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs flex justify-between items-center"
+                    >
+                      <div>
+                        <div className="font-bold text-slate-800 text-sm mb-0.5">
+                          {ship.vehicle_number}{" "}
+                          <span className="px-1.5 py-0.5 ml-1 bg-blue-100 text-blue-800 font-semibold rounded text-[10px]">
+                            {ship.status}
+                          </span>
+                        </div>
+                        <div className="text-slate-500">
+                          Từ:{" "}
+                          <span className="font-semibold text-slate-700">
+                            {ship.origin_hub?.name}
+                          </span>{" "}
+                          • Tài xế: {ship.shipper?.full_name}
+                        </div>
+                      </div>
+                      <div className="text-right text-slate-500">
+                        {new Date(ship.created_at).toLocaleTimeString("vi-VN", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
-            ))}
+
+              {/* Outbound */}
+              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />{" "}
+                    Xe chuẩn bị xuất bến (Outbound)
+                  </h2>
+                </div>
+                <div className="space-y-3">
+                  {monitor?.outbound?.length === 0 ? (
+                    <p className="text-xs text-slate-500 italic">
+                      Không có chuyến xe nào đang gom hàng.
+                    </p>
+                  ) : null}
+                  {monitor?.outbound?.map((ship: HubMonitorShipment) => (
+                    <div
+                      key={ship.id}
+                      className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs flex justify-between items-center"
+                    >
+                      <div>
+                        <div className="font-bold text-slate-800 text-sm mb-0.5">
+                          {ship.vehicle_number || "Chưa điều phối"}{" "}
+                          <span className="px-1.5 py-0.5 ml-1 bg-slate-200 text-slate-700 font-semibold rounded text-[10px]">
+                            {ship.status}
+                          </span>
+                        </div>
+                        <div className="text-slate-500">
+                          Đến:{" "}
+                          <span className="font-semibold text-slate-700">
+                            {ship.destination_hub?.name || "Giao khách"}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="text-right text-slate-500">
+                        {new Date(ship.created_at).toLocaleTimeString("vi-VN", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
+        </>
+      )}
     </div>
   );
 }

@@ -348,9 +348,17 @@ export default function OrdersManagementPage() {
       }
 
       // 3. Fetch Orders
-      const ordersRes = await api.get(
-        `/orders?page=${page}&limit=${itemsPerPage}`,
-      );
+      let url = `/orders?page=${page}&limit=${itemsPerPage}`;
+      if (orderStatusFilter && orderStatusFilter !== "ALL") {
+        url += `&status=${orderStatusFilter}`;
+      }
+      if (orderHubFilter && orderHubFilter !== "ALL") {
+        url += `&hubId=${orderHubFilter}`;
+      }
+      if (orderSearch) {
+        url += `&search=${encodeURIComponent(orderSearch)}`;
+      }
+      const ordersRes = await api.get(url);
       const ordersList = ordersRes.data?.data || ordersRes.data || [];
       if (Array.isArray(ordersList)) setOrders(ordersList);
 
@@ -399,7 +407,20 @@ export default function OrdersManagementPage() {
 
   useEffect(() => {
     loadCoreData(currentPage);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (currentPage === 1) {
+        loadCoreData(1);
+      } else {
+        setCurrentPage(1);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderStatusFilter, orderHubFilter, orderSearch]);
 
   useEffect(() => {
     if (notification) {
@@ -718,21 +739,8 @@ export default function OrdersManagementPage() {
     }
   };
 
-  // Filter Logic
-  const filteredOrders = orders.filter((o) => {
-    const matchesSearch =
-      o.tracking_number?.toLowerCase().includes(orderSearch.toLowerCase()) ||
-      o.sender_name?.toLowerCase().includes(orderSearch.toLowerCase()) ||
-      o.receiver_name?.toLowerCase().includes(orderSearch.toLowerCase()) ||
-      o.receiver_phone?.includes(orderSearch);
-
-    const matchesStatus =
-      orderStatusFilter === "ALL" || o.current_status === orderStatusFilter;
-    const matchesHub =
-      orderHubFilter === "ALL" || o.pickup_hub?.id === orderHubFilter;
-
-    return matchesSearch && matchesStatus && matchesHub;
-  });
+  // Filter Logic (Now handled by backend)
+  const filteredOrders = orders;
 
   const getStatusStyle = (status: string) => {
     switch (status) {

@@ -77,11 +77,11 @@ export default function DashboardLayout({
           href: "/dashboard/incidents",
           icon: AlertTriangle,
         },
-        {
-          name: "Khiếu nại (Tickets)",
-          href: "/dashboard/tickets",
-          icon: AlertCircle,
-        },
+        // {
+        //   name: "Khiếu nại (Tickets)",
+        //   href: "/dashboard/tickets",
+        //   icon: AlertCircle,
+        // },
         {
           name: "Ví / Đối soát",
           href: "/dashboard/finance/wallets",
@@ -119,21 +119,26 @@ export default function DashboardLayout({
           href: "/dashboard/dispatch",
           icon: Truck,
         },
-        { name: "TMS Dashboard", href: "/dashboard/tms", icon: MapPin },
+        // { name: "TMS Dashboard", href: "/dashboard/tms", icon: MapPin },
         {
           name: "Quản lý Sự cố",
           href: "/dashboard/incidents",
           icon: AlertTriangle,
         },
-        {
-          name: "Khiếu nại (Tickets)",
-          href: "/dashboard/tickets",
-          icon: AlertCircle,
-        },
+        // {
+        //   name: "Khiếu nại (Tickets)",
+        //   href: "/dashboard/tickets",
+        //   icon: AlertCircle,
+        // },
         {
           name: "Sự cố & Ngoại lệ",
           href: "/dashboard/exceptions",
           icon: AlertCircle,
+        },
+        {
+          name: "Đối soát COD",
+          href: "/dashboard/finance/wallets",
+          icon: Wallet,
         },
         {
           name: "Vị trí Kệ hàng",

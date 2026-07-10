@@ -455,7 +455,7 @@ export default function LocationsPage() {
             </tbody>
           </table>
         </div>
-        {!isLoading && totalPages > 1 && (
+        {!isLoading && filteredLocations.length > 0 && (
           <div className="p-4 border-t border-slate-200 flex justify-center bg-white z-10">
             <Pagination
               currentPage={currentPage}

@@ -13,6 +13,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import api from "@/lib/axios";
+import Pagination from "@/components/Pagination";
 
 type WalletData = {
   id: string;
@@ -45,6 +46,7 @@ export default function WalletsPage() {
   const [hubs, setHubs] = useState<{ id: string; name: string }[]>([]);
   const [selectedWallet, setSelectedWallet] = useState<WalletData | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [userRole, setUserRole] = useState("");
 
   const [remitAmount, setRemitAmount] = useState<number | string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -53,26 +55,61 @@ export default function WalletsPage() {
     type: "success" | "error";
   } | null>(null);
 
-  // Fetch wallets from API on mount
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const itemsPerPage = 10;
+
+  // Fetch wallets from API on mount and when filters change
   useEffect(() => {
-    const fetchWallets = async () => {
+    const timer = setTimeout(async () => {
       setIsLoading(true);
       setFetchError(null);
       try {
         const savedUser = localStorage.getItem("user");
         const role = savedUser ? JSON.parse(savedUser).role : "";
+        setUserRole(role);
         const endpoint = role === "SHIPPER" ? "/wallets/me" : "/wallets";
-        const res = await api.get(endpoint);
-        const data = res.data?.data || res.data || [];
-        setWallets(Array.isArray(data) ? data : [data]);
+
+        let url = endpoint;
+        if (role !== "SHIPPER") {
+          const params = new URLSearchParams({
+            page: currentPage.toString(),
+            limit: itemsPerPage.toString(),
+          });
+          if (searchTerm) params.append("search", searchTerm);
+          if (selectedHub !== "ALL") params.append("hubId", selectedHub);
+          url = `${endpoint}?${params.toString()}`;
+        }
+
+        const res = await api.get(url);
+        if (role === "SHIPPER") {
+          const data = res.data?.data || res.data || [];
+          const walletArr = Array.isArray(data) ? data : [data];
+          setWallets(walletArr);
+          if (walletArr.length > 0) {
+            setSelectedWallet(walletArr[0]);
+          }
+        } else {
+          setWallets(res.data?.data || []);
+          if (res.data?.meta) {
+            setTotalPages(res.data.meta.totalPages);
+            setTotalItems(res.data.meta.totalItems);
+          }
+        }
       } catch (err) {
         console.error("Lỗi fetch ví:", err);
         setFetchError("Không thể tải danh sách ví. Vui lòng thử lại.");
       } finally {
         setIsLoading(false);
       }
-    };
+    }, 500);
 
+    return () => clearTimeout(timer);
+  }, [currentPage, searchTerm, selectedHub]);
+
+  useEffect(() => {
     const fetchHubs = async () => {
       try {
         const res = await api.get("/hubs");
@@ -82,16 +119,11 @@ export default function WalletsPage() {
         console.error("Lỗi fetch hubs:", err);
       }
     };
-
-    fetchWallets();
     fetchHubs();
   }, []);
 
-  const filteredWallets = wallets.filter((w) => {
-    if (selectedHub !== "ALL" && w.user?.hub?.id !== selectedHub) return false;
-    const name = w.user?.full_name || "";
-    return name.toLowerCase().includes(searchTerm.toLowerCase());
-  });
+  // Use the fetched wallets directly since filtering is on the backend
+  const filteredWallets = wallets;
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("vi-VN", {
@@ -181,201 +213,57 @@ export default function WalletsPage() {
         </div>
       </div>
 
-      {/* Toolbar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-        <div className="flex flex-col sm:flex-row gap-4 w-full sm:max-w-xl">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Tìm kiếm theo tên tài xế..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm"
-            />
-          </div>
-          <select
-            className="px-3 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20 text-sm font-semibold sm:min-w-[180px]"
-            value={selectedHub}
-            onChange={(e) => setSelectedHub(e.target.value)}
-          >
-            <option value="ALL">Tất cả bưu cục</option>
-            {hubs.map((h) => (
-              <option key={h.id} value={h.id}>
-                {h.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      {/* Data Table */}
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-        {isLoading ? (
-          <div className="flex items-center justify-center py-16 gap-3 text-slate-500">
-            <Loader2 className="w-5 h-5 animate-spin" />
-            <span className="text-sm">Đang tải danh sách ví...</span>
-          </div>
-        ) : fetchError ? (
-          <div className="flex items-center justify-center py-16 gap-3 text-red-500">
-            <AlertCircle className="w-5 h-5" />
-            <span className="text-sm">{fetchError}</span>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 text-sm">
-                  <th className="px-6 py-4 font-medium">Tên Tài xế</th>
-                  <th className="px-6 py-4 font-medium text-right">
-                    Dư nợ COD
-                  </th>
-                  <th className="px-6 py-4 font-medium text-right">
-                    Số dư Thu nhập
-                  </th>
-                  <th className="px-6 py-4 font-medium text-center">
-                    Hành động
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filteredWallets.length > 0 ? (
-                  filteredWallets.map((wallet) => (
-                    <tr
-                      key={wallet.id}
-                      className="hover:bg-slate-50/80 transition-colors cursor-pointer group"
-                      onClick={() => openDrawer(wallet)}
-                    >
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-semibold text-xs">
-                            {(wallet.user?.full_name || "?").charAt(0)}
-                          </div>
-                          <div>
-                            <p className="font-medium text-slate-800 text-sm group-hover:text-blue-600 transition-colors">
-                              {wallet.user?.full_name || "Tài xế"}
-                            </p>
-                            <p className="text-xs text-slate-500">
-                              {wallet.user?.email ||
-                                `ID: ${wallet.id.slice(0, 8)}`}
-                            </p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <span
-                          className={`font-semibold ${wallet.cod_debt > 0 ? "text-red-600" : "text-slate-600"}`}
-                        >
-                          {formatCurrency(wallet.cod_debt)}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <span className="font-semibold text-emerald-600">
-                          {formatCurrency(wallet.income_balance)}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <button
-                          className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openDrawer(wallet);
-                          }}
-                        >
-                          <ArrowRightLeft className="w-4 h-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td
-                      colSpan={4}
-                      className="px-6 py-8 text-center text-slate-500"
-                    >
-                      Không tìm thấy tài xế nào
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* Drawer */}
-      {isDrawerOpen && selectedWallet && (
-        <>
-          <div
-            className="fixed inset-0 bg-slate-900/50 z-40 transition-opacity"
-            onClick={closeDrawer}
-          />
-          <div className="fixed inset-y-0 right-0 w-full max-w-md bg-white shadow-2xl z-50 flex flex-col transform transition-transform duration-300 ease-in-out">
-            <div className="flex items-center justify-between p-4 sm:p-6 border-b border-slate-100 bg-white">
-              <div>
-                <h2 className="text-lg font-bold text-slate-900">
-                  Chi tiết Ví
-                </h2>
-                <p className="text-sm text-slate-500">
-                  {selectedWallet.user?.full_name || "Shipper"}
-                </p>
+      {userRole === "SHIPPER" && selectedWallet && (
+        <div className="space-y-6 mt-6 animate-fadeIn">
+          {/* Wallet Summary */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-red-50 p-4 rounded-xl border border-red-100 shadow-sm">
+              <div className="flex items-center gap-2 text-red-600 mb-2">
+                <DollarSign className="w-5 h-5" />
+                <span className="text-xs font-bold uppercase tracking-wider">
+                  Dư nợ COD
+                </span>
               </div>
-              <button
-                onClick={closeDrawer}
-                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <p className="text-2xl font-black text-red-700">
+                {formatCurrency(selectedWallet.cod_debt)}
+              </p>
             </div>
-
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-8">
-              {/* Wallet Summary */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-red-50 p-4 rounded-xl border border-red-100">
-                  <div className="flex items-center gap-2 text-red-600 mb-2">
-                    <DollarSign className="w-4 h-4" />
-                    <span className="text-xs font-semibold uppercase tracking-wider">
-                      Dư nợ COD
-                    </span>
-                  </div>
-                  <p className="text-xl font-bold text-red-700">
-                    {formatCurrency(selectedWallet.cod_debt)}
-                  </p>
-                </div>
-                <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100">
-                  <div className="flex items-center gap-2 text-emerald-600 mb-2">
-                    <Wallet className="w-4 h-4" />
-                    <span className="text-xs font-semibold uppercase tracking-wider">
-                      Thu nhập
-                    </span>
-                  </div>
-                  <p className="text-xl font-bold text-emerald-700">
-                    {formatCurrency(selectedWallet.income_balance)}
-                  </p>
-                </div>
+            <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100 shadow-sm">
+              <div className="flex items-center gap-2 text-emerald-600 mb-2">
+                <Wallet className="w-5 h-5" />
+                <span className="text-xs font-bold uppercase tracking-wider">
+                  Thu nhập
+                </span>
               </div>
+              <p className="text-2xl font-black text-emerald-700">
+                {formatCurrency(selectedWallet.income_balance)}
+              </p>
+            </div>
+          </div>
 
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-1">
               {/* Remit Form */}
-              <div className="bg-slate-50 p-5 rounded-xl border border-slate-200">
-                <h3 className="text-sm font-semibold text-slate-800 mb-4 flex items-center gap-2">
-                  <ArrowRightLeft className="w-4 h-4 text-blue-600" />
+              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm h-full">
+                <h3 className="text-base font-bold text-slate-800 mb-6 flex items-center gap-2">
+                  <ArrowRightLeft className="w-5 h-5 text-blue-600" />
                   Xác nhận nộp COD
                 </h3>
-                <form onSubmit={handleRemitSubmit} className="space-y-4">
+                <form onSubmit={handleRemitSubmit} className="space-y-5">
                   <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1.5">
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">
                       Số tiền nộp (VND)
                     </label>
                     <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <span className="text-slate-400">₫</span>
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                        <span className="text-slate-400 font-medium">₫</span>
                       </div>
                       <input
                         type="number"
                         min="0"
                         value={remitAmount}
                         onChange={(e) => setRemitAmount(e.target.value)}
-                        className="block w-full pl-8 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors text-sm"
+                        className="block w-full pl-9 pr-4 py-3 border border-slate-300 rounded-xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm font-medium"
                         placeholder="Nhập số tiền..."
                       />
                     </div>
@@ -385,95 +273,426 @@ export default function WalletsPage() {
                     disabled={
                       isSubmitting || !remitAmount || Number(remitAmount) <= 0
                     }
-                    className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white font-medium px-4 py-2 rounded-lg hover:bg-blue-700 focus:ring-4 focus:ring-blue-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                    className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white font-semibold px-4 py-3 rounded-xl hover:bg-blue-700 focus:ring-4 focus:ring-blue-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm shadow-sm"
                   >
                     {isSubmitting ? (
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                     ) : (
                       "Xác nhận nộp"
                     )}
                   </button>
                 </form>
               </div>
+            </div>
 
+            <div className="lg:col-span-2">
               {/* Recent Transactions */}
-              <div>
-                <h3 className="text-sm font-semibold text-slate-800 mb-4 border-b border-slate-100 pb-2">
-                  Lịch sử giao dịch gần đây
-                </h3>
-                <div className="space-y-3">
-                  {(selectedWallet?.transactions || []).length > 0 ? (
-                    (selectedWallet?.transactions || []).map(
-                      (tx: Transaction) => (
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden h-full flex flex-col">
+                <div className="p-5 border-b border-slate-100 bg-slate-50/50">
+                  <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                    <Clock className="w-5 h-5 text-indigo-500" />
+                    Lịch sử giao dịch
+                  </h3>
+                </div>
+                <div className="flex-1 overflow-y-auto p-2">
+                  <div className="space-y-2">
+                    {(selectedWallet?.transactions || []).length > 0 ? (
+                      (selectedWallet?.transactions || []).map((tx: Transaction) => (
                         <div
                           key={tx.id}
-                          className="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-lg shadow-sm"
+                          className="flex items-center justify-between p-4 rounded-xl border border-slate-100 hover:bg-slate-50 transition-colors"
                         >
                           <div className="flex items-center gap-3">
                             <div
-                              className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                                tx.type === "COD_DEPOSIT"
-                                  ? "bg-blue-100 text-blue-600"
-                                  : tx.type === "INCOME"
-                                    ? "bg-emerald-100 text-emerald-600"
-                                    : "bg-orange-100 text-orange-600"
+                              className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                                tx.type === "INCOME"
+                                  ? "bg-emerald-100 text-emerald-600"
+                                  : tx.type === "COD_DEPOSIT"
+                                    ? "bg-blue-100 text-blue-600"
+                                    : "bg-red-100 text-red-600"
                               }`}
                             >
-                              {tx.type === "COD_DEPOSIT" ? (
-                                <ArrowRightLeft className="w-4 h-4" />
+                              {tx.type === "INCOME" ? (
+                                <DollarSign className="w-5 h-5" />
                               ) : (
-                                <Wallet className="w-4 h-4" />
+                                <Wallet className="w-5 h-5" />
                               )}
                             </div>
                             <div>
-                              <p className="text-xs font-medium text-slate-800">
-                                {tx.type === "COD_DEPOSIT"
-                                  ? "Nộp COD"
-                                  : tx.type === "INCOME"
-                                    ? "Cộng thu nhập"
+                              <p className="font-bold text-slate-800 text-sm">
+                                {tx.type === "INCOME"
+                                  ? "Cộng thu nhập"
+                                  : tx.type === "COD_DEPOSIT"
+                                    ? "Nộp tiền COD"
                                     : "Rút tiền"}
                               </p>
-                              <p className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5">
-                                <Clock className="w-3 h-3" />
-                                {tx.date}
+                              <p className="text-xs text-slate-500 mt-0.5 font-medium">
+                                {new Date(tx.date).toLocaleString("vi-VN")}
                               </p>
                             </div>
                           </div>
                           <div className="text-right">
                             <p
-                              className={`text-sm font-semibold ${tx.type === "COD_DEPOSIT" ? "text-blue-600" : "text-emerald-600"}`}
+                              className={`font-bold ${
+                                tx.type === "INCOME"
+                                  ? "text-emerald-600"
+                                  : "text-slate-700"
+                              }`}
                             >
-                              {tx.type === "COD_DEPOSIT" ? "-" : "+"}
+                              {tx.type === "INCOME" ? "+" : "-"}
                               {formatCurrency(tx.amount)}
                             </p>
                             <span
-                              className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium ${
+                              className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold mt-1 uppercase tracking-wider ${
                                 tx.status === "SUCCESS"
-                                  ? "bg-emerald-100 text-emerald-700"
+                                  ? "bg-emerald-50 text-emerald-700"
                                   : tx.status === "PENDING"
-                                    ? "bg-amber-100 text-amber-700"
-                                    : "bg-red-100 text-red-700"
+                                    ? "bg-amber-50 text-amber-700"
+                                    : "bg-red-50 text-red-700"
                               }`}
                             >
-                              {tx.status === "SUCCESS"
-                                ? "Thành công"
-                                : tx.status === "PENDING"
-                                  ? "Đang xử lý"
-                                  : "Thất bại"}
+                              {tx.status}
                             </span>
                           </div>
                         </div>
-                      ),
-                    )
-                  ) : (
-                    <p className="text-sm text-slate-500 text-center py-4">
-                      Chưa có giao dịch nào.
-                    </p>
-                  )}
+                      ))
+                    ) : (
+                      <div className="text-center py-10 text-slate-500 text-sm">
+                        Chưa có giao dịch nào
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {userRole !== "SHIPPER" && (
+        <>
+          {/* Toolbar */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+            <div className="flex flex-col sm:flex-row gap-4 w-full sm:max-w-xl">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Tìm kiếm theo tên tài xế..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm"
+                />
+              </div>
+              {userRole === "ADMIN" && (
+                <select
+                  className="px-3 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20 text-sm font-semibold sm:min-w-[180px]"
+                  value={selectedHub}
+                  onChange={(e) => setSelectedHub(e.target.value)}
+                >
+                  <option value="ALL">Tất cả bưu cục</option>
+                  {hubs.map((h) => (
+                    <option key={h.id} value={h.id}>
+                      {h.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          </div>
+
+          {/* Data Table */}
+          <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+            {isLoading ? (
+              <div className="flex items-center justify-center py-16 gap-3 text-slate-500">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span className="text-sm">Đang tải danh sách ví...</span>
+              </div>
+            ) : fetchError ? (
+              <div className="flex items-center justify-center py-16 gap-3 text-red-500">
+                <AlertCircle className="w-5 h-5" />
+                <span className="text-sm">{fetchError}</span>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 text-sm">
+                      <th className="px-6 py-4 font-medium">Tên Tài xế</th>
+                      {userRole === "ADMIN" && (
+                        <th className="px-6 py-4 font-medium">Bưu cục</th>
+                      )}
+                      <th className="px-6 py-4 font-medium text-right">
+                        Dư nợ COD
+                      </th>
+                      <th className="px-6 py-4 font-medium text-right">
+                        Số dư Thu nhập
+                      </th>
+                      <th className="px-6 py-4 font-medium text-center">
+                        Hành động
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredWallets.length > 0 ? (
+                      filteredWallets.map((wallet) => (
+                        <tr
+                          key={wallet.id}
+                          className="hover:bg-slate-50/80 transition-colors cursor-pointer group"
+                          onClick={() => openDrawer(wallet)}
+                        >
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-semibold text-xs">
+                                {(wallet.user?.full_name || "?").charAt(0)}
+                              </div>
+                              <div>
+                                <p className="font-medium text-slate-800 text-sm group-hover:text-blue-600 transition-colors">
+                                  {wallet.user?.full_name || "Tài xế"}
+                                </p>
+                                <p className="text-xs text-slate-500">
+                                  {wallet.user?.email ||
+                                    `ID: ${wallet.id.slice(0, 8)}`}
+                                </p>
+                              </div>
+                            </div>
+                          </td>
+                          {userRole === "ADMIN" && (
+                            <td className="px-6 py-4">
+                              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">
+                                {wallet.user?.hub?.name || "Chưa gắn kho"}
+                              </span>
+                            </td>
+                          )}
+                          <td className="px-6 py-4 text-right">
+                            <span
+                              className={`font-semibold ${wallet.cod_debt > 0 ? "text-red-600" : "text-slate-600"}`}
+                            >
+                              {formatCurrency(wallet.cod_debt)}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <span className="font-semibold text-emerald-600">
+                              {formatCurrency(wallet.income_balance)}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            <button
+                              className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openDrawer(wallet);
+                              }}
+                            >
+                              <ArrowRightLeft className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td
+                          colSpan={userRole === "ADMIN" ? 5 : 4}
+                          className="px-6 py-8 text-center text-slate-500"
+                        >
+                          Không tìm thấy tài xế nào
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {!isLoading &&
+              filteredWallets.length > 0 &&
+              userRole !== "SHIPPER" && (
+                <div className="p-4 border-t border-slate-200 flex justify-center bg-white z-10">
+                  <Pagination
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    totalItems={totalItems}
+                    itemsPerPage={itemsPerPage}
+                    onPageChange={setCurrentPage}
+                  />
+                </div>
+              )}
+          </div>
+
+          {/* Drawer */}
+          {isDrawerOpen && selectedWallet && (
+            <>
+              <div
+                className="fixed inset-0 bg-slate-900/50 z-40 transition-opacity"
+                onClick={closeDrawer}
+              />
+              <div className="fixed inset-y-0 right-0 w-full max-w-md bg-white shadow-2xl z-50 flex flex-col transform transition-transform duration-300 ease-in-out">
+                <div className="flex items-center justify-between p-4 sm:p-6 border-b border-slate-100 bg-white">
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-900">
+                      Chi tiết Ví
+                    </h2>
+                    <p className="text-sm text-slate-500">
+                      {selectedWallet.user?.full_name || "Shipper"}
+                    </p>
+                  </div>
+                  <button
+                    onClick={closeDrawer}
+                    className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-8">
+                  {/* Wallet Summary */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-red-50 p-4 rounded-xl border border-red-100">
+                      <div className="flex items-center gap-2 text-red-600 mb-2">
+                        <DollarSign className="w-4 h-4" />
+                        <span className="text-xs font-semibold uppercase tracking-wider">
+                          Dư nợ COD
+                        </span>
+                      </div>
+                      <p className="text-xl font-bold text-red-700">
+                        {formatCurrency(selectedWallet.cod_debt)}
+                      </p>
+                    </div>
+                    <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100">
+                      <div className="flex items-center gap-2 text-emerald-600 mb-2">
+                        <Wallet className="w-4 h-4" />
+                        <span className="text-xs font-semibold uppercase tracking-wider">
+                          Thu nhập
+                        </span>
+                      </div>
+                      <p className="text-xl font-bold text-emerald-700">
+                        {formatCurrency(selectedWallet.income_balance)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Remit Form */}
+                  <div className="bg-slate-50 p-5 rounded-xl border border-slate-200">
+                    <h3 className="text-sm font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                      <ArrowRightLeft className="w-4 h-4 text-blue-600" />
+                      Xác nhận nộp COD
+                    </h3>
+                    <form onSubmit={handleRemitSubmit} className="space-y-4">
+                      <div>
+                        <label className="block text-xs font-medium text-slate-600 mb-1.5">
+                          Số tiền nộp (VND)
+                        </label>
+                        <div className="relative">
+                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <span className="text-slate-400">₫</span>
+                          </div>
+                          <input
+                            type="number"
+                            min="0"
+                            value={remitAmount}
+                            onChange={(e) => setRemitAmount(e.target.value)}
+                            className="block w-full pl-8 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors text-sm"
+                            placeholder="Nhập số tiền..."
+                          />
+                        </div>
+                      </div>
+                      <button
+                        type="submit"
+                        disabled={
+                          isSubmitting ||
+                          !remitAmount ||
+                          Number(remitAmount) <= 0
+                        }
+                        className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white font-medium px-4 py-2 rounded-lg hover:bg-blue-700 focus:ring-4 focus:ring-blue-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                      >
+                        {isSubmitting ? (
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          "Xác nhận nộp"
+                        )}
+                      </button>
+                    </form>
+                  </div>
+
+                  {/* Recent Transactions */}
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-800 mb-4 border-b border-slate-100 pb-2">
+                      Lịch sử giao dịch gần đây
+                    </h3>
+                    <div className="space-y-3">
+                      {(selectedWallet?.transactions || []).length > 0 ? (
+                        (selectedWallet?.transactions || []).map(
+                          (tx: Transaction) => (
+                            <div
+                              key={tx.id}
+                              className="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-lg shadow-sm"
+                            >
+                              <div className="flex items-center gap-3">
+                                <div
+                                  className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                                    tx.type === "COD_DEPOSIT"
+                                      ? "bg-blue-100 text-blue-600"
+                                      : tx.type === "INCOME"
+                                        ? "bg-emerald-100 text-emerald-600"
+                                        : "bg-orange-100 text-orange-600"
+                                  }`}
+                                >
+                                  {tx.type === "COD_DEPOSIT" ? (
+                                    <ArrowRightLeft className="w-4 h-4" />
+                                  ) : (
+                                    <Wallet className="w-4 h-4" />
+                                  )}
+                                </div>
+                                <div>
+                                  <p className="text-xs font-medium text-slate-800">
+                                    {tx.type === "COD_DEPOSIT"
+                                      ? "Nộp COD"
+                                      : tx.type === "INCOME"
+                                        ? "Cộng thu nhập"
+                                        : "Rút tiền"}
+                                  </p>
+                                  <p className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5">
+                                    <Clock className="w-3 h-3" />
+                                    {tx.date}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <p
+                                  className={`text-sm font-semibold ${tx.type === "COD_DEPOSIT" ? "text-blue-600" : "text-emerald-600"}`}
+                                >
+                                  {tx.type === "COD_DEPOSIT" ? "-" : "+"}
+                                  {formatCurrency(tx.amount)}
+                                </p>
+                                <span
+                                  className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium ${
+                                    tx.status === "SUCCESS"
+                                      ? "bg-emerald-100 text-emerald-700"
+                                      : tx.status === "PENDING"
+                                        ? "bg-amber-100 text-amber-700"
+                                        : "bg-red-100 text-red-700"
+                                  }`}
+                                >
+                                  {tx.status === "SUCCESS"
+                                    ? "Thành công"
+                                    : tx.status === "PENDING"
+                                      ? "Đang xử lý"
+                                      : "Thất bại"}
+                                </span>
+                              </div>
+                            </div>
+                          ),
+                        )
+                      ) : (
+                        <p className="text-sm text-slate-500 text-center py-4">
+                          Chưa có giao dịch nào.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
         </>
       )}
     </div>

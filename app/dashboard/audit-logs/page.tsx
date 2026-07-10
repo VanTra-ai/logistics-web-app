@@ -14,16 +14,17 @@ interface AuditLog {
   oldValues: Record<string, unknown> | null;
   newValues: Record<string, unknown> | null;
   userId: string;
+  user?: { full_name: string; email: string } | null;
   createdAt: string;
 }
 
 // Helper to render Action Badges
 const ActionBadge = ({ action }: { action: string }) => {
   switch (action) {
-    case "CREATE":
+    case "INSERT":
       return (
         <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">
-          CREATE
+          INSERT
         </span>
       );
     case "UPDATE":
@@ -141,6 +142,12 @@ export default function AuditLogsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  // Filters
+  const [actionFilter, setActionFilter] = useState("ALL");
+  const [searchUser, setSearchUser] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -151,9 +158,15 @@ export default function AuditLogsPage() {
     if (isRefresh) setIsRefreshing(true);
     else setIsLoading(true);
     try {
-      const res = await api.get(
-        `/audit-logs?page=${page}&limit=${itemsPerPage}`,
-      );
+      const queryParams = new URLSearchParams({
+        page: page.toString(),
+        limit: itemsPerPage.toString(),
+        action: actionFilter,
+        searchUser: searchUser,
+        startDate: startDate,
+        endDate: endDate,
+      });
+      const res = await api.get(`/audit-logs?${queryParams.toString()}`);
       const data = res.data?.data || res.data || [];
       if (Array.isArray(data)) setLogs(data);
 
@@ -171,8 +184,21 @@ export default function AuditLogsPage() {
   };
 
   useEffect(() => {
+    const timer = setTimeout(() => {
+      if (currentPage === 1) {
+        fetchLogs(1);
+      } else {
+        setCurrentPage(1);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [actionFilter, searchUser, startDate, endDate]);
+
+  useEffect(() => {
     const timer = setTimeout(() => fetchLogs(currentPage), 0);
     return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage]);
 
   const handleViewDiff = (log: AuditLog) => {
@@ -211,6 +237,44 @@ export default function AuditLogsPage() {
               className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`}
             />
           </button>
+        </div>
+      </div>
+
+      {/* Filter Toolbar */}
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row gap-4 items-center justify-between">
+        <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto flex-1">
+          <input
+            type="text"
+            placeholder="Tìm người thao tác..."
+            className="px-3 py-2 border border-slate-200 rounded-lg text-sm w-full sm:max-w-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+            value={searchUser}
+            onChange={(e) => setSearchUser(e.target.value)}
+          />
+          <select
+            className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500/20 outline-none"
+            value={actionFilter}
+            onChange={(e) => setActionFilter(e.target.value)}
+          >
+            <option value="ALL">Tất cả hành động</option>
+            <option value="INSERT">INSERT</option>
+            <option value="UPDATE">UPDATE</option>
+            <option value="DELETE">DELETE</option>
+          </select>
+          <div className="flex gap-2 items-center">
+            <input
+              type="date"
+              className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 outline-none"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+            />
+            <span className="text-slate-400">-</span>
+            <input
+              type="date"
+              className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 outline-none"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+            />
+          </div>
         </div>
       </div>
 
@@ -263,7 +327,26 @@ export default function AuditLogsPage() {
                         minute: "2-digit",
                       })}
                     </td>
-                    <td className="px-6 py-4 font-medium">{log.userId}</td>
+                    <td className="px-6 py-4 font-medium">
+                      {log.user ? (
+                        <div>
+                          <div className="text-slate-800">
+                            {log.user.full_name}
+                          </div>
+                          <div className="text-xs text-slate-500 font-normal">
+                            {log.user.email}
+                          </div>
+                        </div>
+                      ) : log.userId ? (
+                        <div className="text-slate-400 italic text-xs">
+                          ID: {log.userId}
+                        </div>
+                      ) : (
+                        <div className="text-slate-400 italic text-xs">
+                          Hệ thống
+                        </div>
+                      )}
+                    </td>
                     <td className="px-6 py-4">
                       <ActionBadge action={log.action} />
                     </td>

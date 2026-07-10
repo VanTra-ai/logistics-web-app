@@ -40,6 +40,7 @@ interface Order {
   weight: number;
   receiver_address: string;
   current_status: string;
+  location?: { location_barcode: string } | null;
 }
 
 interface Shipment {
@@ -78,6 +79,7 @@ export default function DispatchPage() {
 
   // Modal states
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [editShipmentId, setEditShipmentId] = useState<string | null>(null);
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [selectedShipment, setSelectedShipment] = useState<Shipment | null>(
     null,
@@ -145,7 +147,7 @@ export default function DispatchPage() {
       if (Array.isArray(shipmentsList)) setShipments(shipmentsList);
 
       // 4. Load orders currently AT_HUB to assign
-      const ordersRes = await api.get("/orders");
+      const ordersRes = await api.get("/orders?limit=1000");
       const ordersList = ordersRes.data?.data || ordersRes.data || [];
       if (Array.isArray(ordersList)) {
         const atHubOrders = ordersList.filter(
@@ -220,6 +222,7 @@ export default function DispatchPage() {
 
   // Mở Modal Tạo Chuyến xe
   const openCreateModal = () => {
+    setEditShipmentId(null);
     setCreateForm({
       shipper_id: shippers.length > 0 ? shippers[0].id : "",
       vehicle_type: "TRUCK",
@@ -230,8 +233,38 @@ export default function DispatchPage() {
     setIsCreateModalOpen(true);
   };
 
-  // Tạo Chuyến xe (POST /shipments)
-  const handleCreateShipment = async (e: React.FormEvent) => {
+  const openEditModal = (shipment: Shipment) => {
+    setEditShipmentId(shipment.id);
+    setCreateForm({
+      shipper_id: shipment.shipper.id,
+      vehicle_type: shipment.vehicle_type,
+      destination_hub_id: shipment.destination_hub?.id || "",
+      vehicle_number: shipment.vehicle_number || "",
+      capacity_weight: shipment.capacity_weight || 1000,
+    });
+    setIsCreateModalOpen(true);
+  };
+
+  const handleRemoveOrder = async (shipmentId: string, orderId: string) => {
+    if (!window.confirm("Bỏ kiện hàng này khỏi chuyến xe?")) return;
+    try {
+      await api.delete(`/shipments/${shipmentId}/orders/${orderId}`);
+      await loadData();
+      setNotification({
+        type: "success",
+        message: "Đã dỡ kiện hàng xuống an toàn!",
+      });
+    } catch (err: unknown) {
+      const apiError = err as { response?: { data?: { message?: string } } };
+      setNotification({
+        type: "error",
+        message: apiError.response?.data?.message || "Lỗi khi gỡ kiện hàng!",
+      });
+    }
+  };
+
+  // Lưu Chuyến xe (POST /shipments hoặc PATCH /shipments/:id)
+  const handleSaveShipment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!createForm.shipper_id || !createForm.vehicle_number.trim()) {
       setNotification({
@@ -245,7 +278,7 @@ export default function DispatchPage() {
     const originId = currentUser?.hub?.id || "hub-1";
 
     try {
-      const response = await api.post("/shipments", {
+      const payload = {
         shipper_id: createForm.shipper_id,
         vehicle_type: createForm.vehicle_type,
         origin_hub_id: originId,
@@ -255,21 +288,29 @@ export default function DispatchPage() {
             : undefined,
         vehicle_number: createForm.vehicle_number.toUpperCase(),
         capacity_weight: Number(createForm.capacity_weight),
-      });
-      const created = response.data?.data || response.data;
-      if (created) {
-        await loadData();
-        setIsCreateModalOpen(false);
+      };
+
+      if (editShipmentId) {
+        await api.patch(`/shipments/${editShipmentId}`, payload);
+        setNotification({
+          type: "success",
+          message: "Cập nhật thông tin chuyến xe thành công!",
+        });
+      } else {
+        await api.post("/shipments", payload);
         setNotification({
           type: "success",
           message: "Tạo chuyến xe tải mới thành công!",
         });
       }
+
+      await loadData();
+      setIsCreateModalOpen(false);
     } catch (err: unknown) {
       const apiError = err as { response?: { data?: { message?: string } } };
       setNotification({
         type: "error",
-        message: apiError.response?.data?.message || "Lỗi tạo chuyến xe!",
+        message: apiError.response?.data?.message || "Lỗi lưu chuyến xe!",
       });
     } finally {
       setIsSubmitLoading(false);
@@ -320,7 +361,7 @@ export default function DispatchPage() {
 
   // Cho xe xuất bến (PATCH /shipments/:id/status -> status: IN_TRANSIT)
   const handleDispatchTruck = async (shipment: Shipment) => {
-    if (shipment.orders.length === 0) {
+    if (!shipment.orders || shipment.orders.length === 0) {
       alert(
         "Không thể chốt xuất bến chuyến xe rỗng! Vui lòng xếp hàng lên xe trước.",
       );
@@ -372,7 +413,8 @@ export default function DispatchPage() {
     }
   };
 
-  const getWeightSum = (orders: Order[]) => {
+  const getWeightSum = (orders?: Order[]) => {
+    if (!orders) return 0;
     return orders.reduce((sum, o) => sum + Number(o.weight), 0);
   };
 
@@ -595,21 +637,33 @@ export default function DispatchPage() {
                   <div className="border-t border-slate-150 bg-slate-50/50 p-4 flex flex-col justify-between gap-3">
                     <div className="space-y-1">
                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                        Danh sách kiện hàng ({ship.orders.length})
+                        Danh sách kiện hàng ({ship.orders?.length || 0})
                       </span>
-                      {ship.orders.length === 0 ? (
+                      {!ship.orders || ship.orders.length === 0 ? (
                         <span className="text-xs text-slate-400 italic block py-1">
                           Chưa có kiện hàng nào xếp trên xe.
                         </span>
                       ) : (
                         <div className="flex flex-wrap gap-1.5 max-h-16 overflow-y-auto py-1">
-                          {ship.orders.map((o) => (
+                          {(ship.orders || []).map((o) => (
                             <span
                               key={o.id}
                               className="inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-slate-200 rounded text-[10px] font-mono font-semibold text-slate-700"
                             >
                               <Package className="w-2.5 h-2.5 text-slate-400" />
                               {o.tracking_number} ({o.weight}kg)
+                              {ship.status === "PENDING" && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRemoveOrder(ship.id, o.id);
+                                  }}
+                                  className="ml-0.5 p-0.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors cursor-pointer"
+                                  title="Gỡ kiện hàng khỏi xe"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              )}
                             </span>
                           ))}
                         </div>
@@ -626,6 +680,13 @@ export default function DispatchPage() {
                           Xếp thêm hàng
                         </button>
                         <button
+                          onClick={() => openEditModal(ship)}
+                          className="py-2 px-3 bg-amber-50 hover:bg-amber-100 text-amber-600 border border-amber-200 font-bold text-xs rounded-lg transition-colors flex items-center justify-center cursor-pointer"
+                          title="Sửa thông tin chuyến"
+                        >
+                          Sửa
+                        </button>
+                        <button
                           onClick={() => handleCancelShipment(ship)}
                           className="py-2 px-3 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 font-bold text-xs rounded-lg transition-colors flex items-center justify-center cursor-pointer"
                           title="Hủy chuyến"
@@ -635,7 +696,7 @@ export default function DispatchPage() {
                       </div>
                     )}
 
-                    {ship.orders.length > 0 &&
+                    {(ship.orders?.length || 0) > 0 &&
                       ship.vehicle_type === "TRUCK" && (
                         <button
                           onClick={() => handleExportManifest(ship.id)}
@@ -713,186 +774,197 @@ export default function DispatchPage() {
       {isCreateModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn">
           <div className="bg-white rounded-2xl w-full max-w-md border border-slate-200 shadow-2xl relative overflow-hidden">
-            <div className="p-6 border-b border-slate-150 flex justify-between items-center bg-slate-50/50">
-              <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                <Truck className="w-5 h-5 text-blue-600" />
-                Tạo chuyến xe tải mới
-              </h2>
-              <button
-                onClick={() => setIsCreateModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateShipment} className="p-6 space-y-4">
-              {/* Biển số xe */}
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                  Biển số xe tải
-                </label>
-                <input
-                  type="text"
-                  required
-                  className="block w-full px-3.5 py-2.5 bg-slate-50 border border-slate-250 text-slate-800 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm placeholder:text-slate-400"
-                  placeholder="Ví dụ: 29C-123.45"
-                  value={createForm.vehicle_number}
-                  onChange={(e) =>
-                    setCreateForm({
-                      ...createForm,
-                      vehicle_number: e.target.value,
-                    })
-                  }
-                />
-              </div>
-
-              {/* Tài xế */}
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                  Chọn tài xế phụ trách
-                </label>
-                <select
-                  required
-                  className="block w-full px-3 py-2.5 bg-slate-50 border border-slate-250 text-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm font-medium"
-                  value={createForm.shipper_id}
-                  onChange={(e) =>
-                    setCreateForm({ ...createForm, shipper_id: e.target.value })
-                  }
+            <form onSubmit={handleSaveShipment}>
+              <div className="flex items-center justify-between p-5 border-b border-slate-100">
+                <h3 className="text-base font-bold text-slate-800">
+                  {editShipmentId
+                    ? "Sửa Thông Tin Chuyến Xe"
+                    : "Điều Phối Xe Mới"}
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setIsCreateModalOpen(false)}
+                  className="text-slate-400 hover:text-slate-600 cursor-pointer"
                 >
-                  <option value="">-- Chọn tài xế xe tải --</option>
-                  {shippers.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.full_name} ({s.phone_number})
-                    </option>
-                  ))}
-                </select>
+                  <X className="w-5 h-5" />
+                </button>
               </div>
 
-              {/* Loại Phương tiện */}
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                  Loại phương tiện
-                </label>
-                <div className="flex gap-4">
-                  <label
-                    className={`flex items-center gap-2 flex-1 p-3 rounded-xl border cursor-pointer transition-colors ${createForm.vehicle_type === "BIKE" ? "bg-blue-50 border-blue-200" : "bg-slate-50 border-slate-200"}`}
-                  >
-                    <input
-                      type="radio"
-                      name="vehicle_type"
-                      className="hidden"
-                      checked={createForm.vehicle_type === "BIKE"}
-                      onChange={() =>
-                        setCreateForm({
-                          ...createForm,
-                          vehicle_type: "BIKE",
-                          capacity_weight: 50,
-                          destination_hub_id: "",
-                        })
-                      }
-                    />
-                    <Bike
-                      className={`w-5 h-5 ${createForm.vehicle_type === "BIKE" ? "text-blue-600" : "text-slate-400"}`}
-                    />
-                    <span
-                      className={`text-sm font-bold ${createForm.vehicle_type === "BIKE" ? "text-blue-800" : "text-slate-600"}`}
-                    >
-                      Xe máy 🛵
-                    </span>
-                  </label>
-                  <label
-                    className={`flex items-center gap-2 flex-1 p-3 rounded-xl border cursor-pointer transition-colors ${createForm.vehicle_type === "TRUCK" ? "bg-blue-50 border-blue-200" : "bg-slate-50 border-slate-200"}`}
-                  >
-                    <input
-                      type="radio"
-                      name="vehicle_type"
-                      className="hidden"
-                      checked={createForm.vehicle_type === "TRUCK"}
-                      onChange={() =>
-                        setCreateForm({
-                          ...createForm,
-                          vehicle_type: "TRUCK",
-                          capacity_weight: 1000,
-                        })
-                      }
-                    />
-                    <Truck
-                      className={`w-5 h-5 ${createForm.vehicle_type === "TRUCK" ? "text-blue-600" : "text-slate-400"}`}
-                    />
-                    <span
-                      className={`text-sm font-bold ${createForm.vehicle_type === "TRUCK" ? "text-blue-800" : "text-slate-600"}`}
-                    >
-                      Xe tải 🚚
-                    </span>
-                  </label>
-                </div>
-              </div>
-
-              {/* Trạm đích */}
-              {createForm.vehicle_type === "TRUCK" && (
+              <div className="p-6 space-y-4">
+                {/* Biển số xe */}
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                    Bưu cục cập bến tiếp theo (Đích)
+                    Biển số xe tải
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    className="block w-full px-3.5 py-2.5 bg-slate-50 border border-slate-250 text-slate-800 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm placeholder:text-slate-400"
+                    placeholder="Ví dụ: 29C-123.45"
+                    value={createForm.vehicle_number}
+                    onChange={(e) =>
+                      setCreateForm({
+                        ...createForm,
+                        vehicle_number: e.target.value,
+                      })
+                    }
+                  />
+                </div>
+
+                {/* Tài xế */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                    Chọn tài xế phụ trách
                   </label>
                   <select
                     required
                     className="block w-full px-3 py-2.5 bg-slate-50 border border-slate-250 text-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm font-medium"
-                    value={createForm.destination_hub_id}
+                    value={createForm.shipper_id}
                     onChange={(e) =>
                       setCreateForm({
                         ...createForm,
-                        destination_hub_id: e.target.value,
+                        shipper_id: e.target.value,
                       })
                     }
                   >
-                    <option value="">-- Chọn bưu cục đích --</option>
-                    {hubs
-                      .filter((h) => h.id !== currentUser?.hub?.id)
-                      .map((h) => (
-                        <option key={h.id} value={h.id}>
-                          {h.name}
-                        </option>
-                      ))}
+                    <option value="">-- Chọn tài xế xe tải --</option>
+                    {shippers.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.full_name} ({s.phone_number})
+                      </option>
+                    ))}
                   </select>
                 </div>
-              )}
 
-              {/* Tải trọng xe */}
-              <div>
-                <label className="block text-xs font-bold text-slate-555 uppercase tracking-wider mb-2">
-                  Tải trọng tối đa của xe (kg)
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  required
-                  className="block w-full px-3.5 py-2.5 bg-slate-50 border border-slate-250 text-slate-800 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm font-semibold"
-                  value={createForm.capacity_weight}
-                  onChange={(e) =>
-                    setCreateForm({
-                      ...createForm,
-                      capacity_weight: Number(e.target.value),
-                    })
-                  }
-                />
-              </div>
+                {/* Loại Phương tiện */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                    Loại phương tiện
+                  </label>
+                  <div className="flex gap-4">
+                    <label
+                      className={`flex items-center gap-2 flex-1 p-3 rounded-xl border cursor-pointer transition-colors ${createForm.vehicle_type === "BIKE" ? "bg-blue-50 border-blue-200" : "bg-slate-50 border-slate-200"}`}
+                    >
+                      <input
+                        type="radio"
+                        name="vehicle_type"
+                        className="hidden"
+                        checked={createForm.vehicle_type === "BIKE"}
+                        onChange={() =>
+                          setCreateForm({
+                            ...createForm,
+                            vehicle_type: "BIKE",
+                            capacity_weight: 50,
+                            destination_hub_id: "",
+                          })
+                        }
+                      />
+                      <Bike
+                        className={`w-5 h-5 ${createForm.vehicle_type === "BIKE" ? "text-blue-600" : "text-slate-400"}`}
+                      />
+                      <span
+                        className={`text-sm font-bold ${createForm.vehicle_type === "BIKE" ? "text-blue-800" : "text-slate-600"}`}
+                      >
+                        Xe máy 🛵
+                      </span>
+                    </label>
+                    <label
+                      className={`flex items-center gap-2 flex-1 p-3 rounded-xl border cursor-pointer transition-colors ${createForm.vehicle_type === "TRUCK" ? "bg-blue-50 border-blue-200" : "bg-slate-50 border-slate-200"}`}
+                    >
+                      <input
+                        type="radio"
+                        name="vehicle_type"
+                        className="hidden"
+                        checked={createForm.vehicle_type === "TRUCK"}
+                        onChange={() =>
+                          setCreateForm({
+                            ...createForm,
+                            vehicle_type: "TRUCK",
+                            capacity_weight: 1000,
+                          })
+                        }
+                      />
+                      <Truck
+                        className={`w-5 h-5 ${createForm.vehicle_type === "TRUCK" ? "text-blue-600" : "text-slate-400"}`}
+                      />
+                      <span
+                        className={`text-sm font-bold ${createForm.vehicle_type === "TRUCK" ? "text-blue-800" : "text-slate-600"}`}
+                      >
+                        Xe tải 🚚
+                      </span>
+                    </label>
+                  </div>
+                </div>
 
-              <div className="flex justify-end gap-2 pt-4 border-t border-slate-150">
-                <button
-                  type="button"
-                  onClick={() => setIsCreateModalOpen(false)}
-                  className="px-4 py-2.5 border border-slate-255 text-slate-700 font-semibold text-sm rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
-                >
-                  Hủy
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitLoading}
-                  className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm rounded-xl transition-all shadow-md active:scale-[0.98] cursor-pointer disabled:opacity-50"
-                >
-                  {isSubmitLoading ? "Đang tạo..." : "Lưu chuyến"}
-                </button>
+                {/* Trạm đích */}
+                {createForm.vehicle_type === "TRUCK" && (
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                      Bưu cục cập bến tiếp theo (Đích)
+                    </label>
+                    <select
+                      required
+                      className="block w-full px-3 py-2.5 bg-slate-50 border border-slate-250 text-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm font-medium"
+                      value={createForm.destination_hub_id}
+                      onChange={(e) =>
+                        setCreateForm({
+                          ...createForm,
+                          destination_hub_id: e.target.value,
+                        })
+                      }
+                    >
+                      <option value="">-- Chọn bưu cục đích --</option>
+                      {hubs
+                        .filter((h) => h.id !== currentUser?.hub?.id)
+                        .map((h) => (
+                          <option key={h.id} value={h.id}>
+                            {h.name}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Tải trọng xe */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-555 uppercase tracking-wider mb-2">
+                    Tải trọng tối đa của xe (kg)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    className="block w-full px-3.5 py-2.5 bg-slate-50 border border-slate-250 text-slate-800 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm font-semibold"
+                    value={createForm.capacity_weight}
+                    onChange={(e) =>
+                      setCreateForm({
+                        ...createForm,
+                        capacity_weight: Number(e.target.value),
+                      })
+                    }
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-4 border-t border-slate-150">
+                  <button
+                    type="button"
+                    onClick={() => setIsCreateModalOpen(false)}
+                    className="px-4 py-2.5 border border-slate-255 text-slate-700 font-semibold text-sm rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmitLoading}
+                    className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl transition-colors disabled:opacity-50"
+                  >
+                    {isSubmitLoading
+                      ? "Đang lưu..."
+                      : editShipmentId
+                        ? "Cập nhật chuyến"
+                        : "Tạo chuyến"}
+                  </button>
+                </div>
               </div>
             </form>
           </div>
@@ -947,8 +1019,17 @@ export default function DispatchPage() {
                         }}
                       />
                       <div className="flex-1 space-y-0.5">
-                        <span className="font-mono text-slate-900 block">
+                        <span className="font-mono text-slate-900 block flex items-center gap-2">
                           {o.tracking_number} ({o.weight}kg)
+                          {o.location ? (
+                            <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 text-[9px] font-bold rounded uppercase">
+                              Kệ: {o.location.location_barcode}
+                            </span>
+                          ) : (
+                            <span className="px-1.5 py-0.5 bg-amber-50 text-amber-700 text-[9px] font-bold rounded uppercase">
+                              Chưa xếp kệ
+                            </span>
+                          )}
                         </span>
                         <span className="text-[10px] text-slate-400 block truncate">
                           Địa chỉ: {o.receiver_address}

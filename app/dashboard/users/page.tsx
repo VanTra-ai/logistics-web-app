@@ -101,9 +101,14 @@ export default function UsersManagementPage() {
     setNotification(null);
 
     try {
-      const response = await api.get(
-        `/users?page=${page}&limit=${itemsPerPage}`,
-      );
+      const queryParams = new URLSearchParams({
+        page: page.toString(),
+        limit: itemsPerPage.toString(),
+        role: roleFilter,
+        search: searchTerm,
+      });
+
+      const response = await api.get(`/users?${queryParams.toString()}`);
       const data = response.data?.data || response.data || [];
       if (Array.isArray(data)) {
         setUsers(data);
@@ -134,7 +139,20 @@ export default function UsersManagementPage() {
   useEffect(() => {
     const timer = setTimeout(() => fetchUsers(currentPage), 0);
     return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (currentPage === 1) {
+        fetchUsers(1);
+      } else {
+        setCurrentPage(1);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roleFilter, searchTerm]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -150,16 +168,7 @@ export default function UsersManagementPage() {
     }
   }, [notification]);
 
-  // Bộ lọc tìm kiếm
-  const filteredUsers = users.filter((u) => {
-    const matchesSearch =
-      u.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      u.phone_number.includes(searchTerm);
-
-    const matchesRole = roleFilter === "ALL" || u.role === roleFilter;
-    return matchesSearch && matchesRole;
-  });
+  // Xóa bộ lọc tìm kiếm client-side
 
   // Modal actions
   const openAddModal = () => {
@@ -517,7 +526,7 @@ export default function UsersManagementPage() {
               Đang tải dữ liệu nhân viên...
             </p>
           </div>
-        ) : filteredUsers.length === 0 ? (
+        ) : users.length === 0 ? (
           <div className="p-16 text-center">
             <div className="mx-auto w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mb-3 text-slate-400">
               <Users className="w-6 h-6" />
@@ -543,7 +552,7 @@ export default function UsersManagementPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-150 text-sm">
-                {filteredUsers.map((item) => (
+                {users.map((item) => (
                   <tr
                     key={item.id}
                     className="hover:bg-slate-50/30 transition-colors"
@@ -661,7 +670,7 @@ export default function UsersManagementPage() {
             </table>
           </div>
         )}
-        {!isLoading && filteredUsers.length > 0 && (
+        {!isLoading && users.length > 0 && (
           <Pagination
             currentPage={currentPage}
             totalPages={totalPages}
