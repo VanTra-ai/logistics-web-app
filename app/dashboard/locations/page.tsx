@@ -45,6 +45,20 @@ export default function LocationsPage() {
   const [totalItems, setTotalItems] = useState(0);
   const itemsPerPage = 10;
 
+  // Stats from backend
+  const [stats, setStats] = useState({
+    total: 0,
+    empty: 0,
+    occupied: 0,
+    full: 0,
+  });
+
+  const [availableZones, setAvailableZones] = useState<string[]>([
+    "A",
+    "B",
+    "C",
+  ]);
+
   // Form State
   const [formData, setFormData] = useState({
     zone: "",
@@ -57,20 +71,38 @@ export default function LocationsPage() {
   const fetchLocations = useCallback(async () => {
     setIsLoading(true);
     try {
+      // Get current user from localStorage
+      const userStr = localStorage.getItem("user");
+      let hubId = "";
+      if (userStr) {
+        try {
+          const user = JSON.parse(userStr);
+          if (user.role === "HUB_COORDINATOR" && user.hub?.id) {
+            hubId = user.hub.id;
+          }
+        } catch (e) {
+          console.error("Failed to parse user", e);
+        }
+      }
+
       const params: Record<string, string> = {
         page: currentPage.toString(),
         limit: itemsPerPage.toString(),
       };
+      if (hubId) params.hubId = hubId;
       if (zoneFilter !== "ALL") params.zone = zoneFilter;
       if (statusFilter !== "ALL") params.status = statusFilter;
       if (searchQuery) params.search = searchQuery;
 
       const response = await api.get("/locations", { params });
-      
+
       if (response.data?.meta) {
         setLocations(response.data.data);
         setTotalPages(response.data.meta.totalPages);
         setTotalItems(response.data.meta.totalItems);
+        if (response.data.meta.stats) {
+          setStats(response.data.meta.stats);
+        }
       } else {
         const data = response.data?.data || response.data || [];
         setLocations(Array.isArray(data) ? data : []);
@@ -120,12 +152,38 @@ export default function LocationsPage() {
     }
   }, [zoneFilter, statusFilter, currentPage, searchQuery]);
 
+  const fetchZones = useCallback(async () => {
+    try {
+      const userStr = localStorage.getItem("user");
+      let hubId = "";
+      if (userStr) {
+        const user = JSON.parse(userStr);
+        if (user.role === "HUB_COORDINATOR" && user.hub?.id) {
+          hubId = user.hub.id;
+        }
+      }
+      const response = await api.get(
+        `/locations/zones${hubId ? `?hubId=${hubId}` : ""}`,
+      );
+      if (Array.isArray(response.data) && response.data.length > 0) {
+        setAvailableZones(response.data);
+      }
+    } catch (error) {
+      console.error("Failed to fetch zones:", error);
+    }
+  }, []);
+
   useEffect(() => {
     const timer = setTimeout(() => {
       fetchLocations();
     }, 0);
     return () => clearTimeout(timer);
   }, [fetchLocations, currentPage, zoneFilter, statusFilter, searchQuery]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchZones();
+  }, [fetchZones]);
 
   const showNotification = (type: "success" | "error", message: string) => {
     setNotification({ type, message });
@@ -135,7 +193,17 @@ export default function LocationsPage() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await api.post("/locations", formData);
+      const userStr = localStorage.getItem("user");
+      const payload: typeof formData & { hub?: { id: string } } = {
+        ...formData,
+      };
+      if (userStr) {
+        const user = JSON.parse(userStr);
+        if (user.role === "HUB_COORDINATOR" && user.hub?.id) {
+          payload.hub = { id: user.hub.id };
+        }
+      }
+      await api.post("/locations", payload);
       showNotification("success", "Thêm vị trí thành công");
       setShowAddModal(false);
       setFormData({
@@ -146,8 +214,12 @@ export default function LocationsPage() {
         max_capacity: 10,
       });
       fetchLocations();
-    } catch {
-      showNotification("error", "Không thể thêm vị trí. Vui lòng thử lại.");
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string } } };
+      const msg =
+        err.response?.data?.message ||
+        "Không thể thêm vị trí. Vui lòng thử lại.";
+      showNotification("error", msg);
     }
   };
 
@@ -167,13 +239,6 @@ export default function LocationsPage() {
 
   // We let backend handle the search filter for pagination
   const filteredLocations = locations;
-
-  const stats = {
-    total: locations.length,
-    empty: locations.filter((l) => l.status === "EMPTY").length,
-    occupied: locations.filter((l) => l.status === "OCCUPIED").length,
-    full: locations.filter((l) => l.status === "FULL").length,
-  };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -262,9 +327,11 @@ export default function LocationsPage() {
               className="px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="ALL">Khu vực (Tất cả)</option>
-              <option value="A">Zone A</option>
-              <option value="B">Zone B</option>
-              <option value="C">Zone C</option>
+              {availableZones.map((z) => (
+                <option key={z} value={z}>
+                  Zone {z}
+                </option>
+              ))}
             </select>
             <select
               value={statusFilter}

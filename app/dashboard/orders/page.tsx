@@ -14,7 +14,6 @@ import {
   CheckCircle2,
   AlertCircle,
   X,
-  ArrowRight,
   ClipboardList,
   Check,
   Layers,
@@ -63,6 +62,14 @@ interface Order {
   note?: string;
   delivery_image_url?: string;
   cod_status: string;
+  location?: {
+    id: string;
+    zone: string;
+    aisle: string;
+    shelf: string;
+    bin: string;
+    barcode: string;
+  } | null;
   shipment?: {
     id: string;
     vehicle_number: string;
@@ -95,7 +102,6 @@ export default function OrdersManagementPage() {
     role: string;
     hub?: Hub | null;
   } | null>(null);
-  const [activeTab, setActiveTab] = useState<"ORDERS" | "SHIPMENTS">("ORDERS");
 
   // Lists
   const [orders, setOrders] = useState<Order[]>([]);
@@ -136,19 +142,10 @@ export default function OrdersManagementPage() {
   const [exportDate, setExportDate] = useState<string>("");
   const [isBulkUploadModalOpen, setIsBulkUploadModalOpen] = useState(false);
 
-  const [shipmentSearch, setShipmentSearch] = useState("");
-  const [shipmentStatusFilter, setShipmentStatusFilter] = useState("ALL");
-
   // Modals
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null); // For detail or edit
   const [isOrderEditMode, setIsOrderEditMode] = useState(false);
-
-  const [isShipmentModalOpen, setIsShipmentModalOpen] = useState(false);
-  const [selectedShipment, setSelectedShipment] = useState<Shipment | null>(
-    null,
-  ); // For edit
-  const [isShipmentEditMode, setIsShipmentEditMode] = useState(false);
 
   const [isAssignShipmentOpen, setIsAssignShipmentOpen] = useState(false);
   const [ordersToAssignIds, setOrdersToAssignIds] = useState<string[]>([]);
@@ -165,8 +162,48 @@ export default function OrdersManagementPage() {
   const [isPutawayModalOpen, setIsPutawayModalOpen] = useState(false);
   const [putawayOrderId, setPutawayOrderId] = useState("");
   const [putawayOrderTracking, setPutawayOrderTracking] = useState("");
+  const [putawayOrderHubId, setPutawayOrderHubId] = useState("");
   const [putawayBarcode, setPutawayBarcode] = useState("");
   const [isPutawayLoading, setIsPutawayLoading] = useState(false);
+  const [availableLocations, setAvailableLocations] = useState<
+    {
+      id: string;
+      zone: string;
+      aisle: string;
+      shelf: string;
+      bin: string;
+      barcode: string;
+      orders?: { id: string }[];
+      max_capacity: number;
+    }[]
+  >([]);
+
+  useEffect(() => {
+    if (isPutawayModalOpen) {
+      let url = "/locations?limit=500";
+      if (putawayOrderHubId) {
+        url += `&hubId=${putawayOrderHubId}`;
+      }
+      api
+        .get(url)
+        .then((res) => {
+          let locs = res.data.data || [];
+          locs = locs.filter((l: { status: string }) => l.status !== "FULL");
+          locs.sort(
+            (
+              a: { orders?: { id: string }[] },
+              b: { orders?: { id: string }[] },
+            ) => {
+              const countA = a.orders?.length || 0;
+              const countB = b.orders?.length || 0;
+              return countA - countB;
+            },
+          );
+          setAvailableLocations(locs);
+        })
+        .catch((err) => console.error(err));
+    }
+  }, [isPutawayModalOpen, putawayOrderHubId]);
 
   // Form states - Order
   const [orderForm, setOrderForm] = useState({
@@ -185,13 +222,6 @@ export default function OrdersManagementPage() {
     pickup_hub_id: "",
   });
 
-  // Form states - Shipment (Gom nhóm)
-  const [shipmentForm, setShipmentForm] = useState({
-    shipper_id: "",
-    destination_hub_id: "",
-    vehicle_number: "",
-    capacity_weight: 1000,
-  });
   const [isSubmitLoading, setIsSubmitLoading] = useState(false);
 
   // Re-fetch tariff when pickup hub changes
@@ -688,119 +718,13 @@ export default function OrdersManagementPage() {
     }
   };
 
-  // Create or Update Shipment
-  const handleShipmentSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!shipmentForm.shipper_id || !shipmentForm.vehicle_number.trim()) {
-      setNotification({
-        type: "error",
-        message: "Vui lòng điền đầy đủ biển số xe và tài xế!",
-      });
-      return;
-    }
-
-    setIsSubmitLoading(true);
-
-    try {
-      if (isShipmentEditMode && selectedShipment) {
-        await api.patch(`/shipments/${selectedShipment.id}`, {
-          shipper_id: shipmentForm.shipper_id,
-          vehicle_number: shipmentForm.vehicle_number.toUpperCase(),
-          destination_hub_id: shipmentForm.destination_hub_id || null,
-          capacity_weight: Number(shipmentForm.capacity_weight),
-        });
-        setNotification({
-          type: "success",
-          message: "Chỉnh sửa thông tin chuyến xe thành công!",
-        });
-      } else {
-        const originId = currentUser?.hub?.id || hubs[0]?.id || "hub-1";
-        await api.post("/shipments", {
-          shipper_id: shipmentForm.shipper_id,
-          origin_hub_id: originId,
-          destination_hub_id: shipmentForm.destination_hub_id || undefined,
-          vehicle_number: shipmentForm.vehicle_number.toUpperCase(),
-          capacity_weight: Number(shipmentForm.capacity_weight),
-        });
-        setNotification({
-          type: "success",
-          message: "Tạo chuyến xe gom nhóm mới thành công!",
-        });
-      }
-      await loadCoreData(currentPage);
-      setIsShipmentModalOpen(false);
-    } catch (err: unknown) {
-      const apiError = err as { response?: { data?: { message?: string } } };
-      setNotification({
-        type: "error",
-        message: apiError.response?.data?.message || "Lỗi xử lý chuyến xe!",
-      });
-    } finally {
-      setIsSubmitLoading(false);
-    }
-  };
-
-  const openCreateShipmentModal = () => {
-    setSelectedShipment(null);
-    setIsShipmentEditMode(false);
-    setShipmentForm({
-      shipper_id: shippers.length > 0 ? shippers[0].id : "",
-      destination_hub_id: "",
-      vehicle_number: "",
-      capacity_weight: 1000,
-    });
-    setIsShipmentModalOpen(true);
-  };
-
-  const openEditShipmentModal = (ship: Shipment) => {
-    setSelectedShipment(ship);
-    setIsShipmentEditMode(true);
-    setShipmentForm({
-      shipper_id: ship.shipper.id,
-      destination_hub_id: ship.destination_hub?.id || "",
-      vehicle_number: ship.vehicle_number,
-      capacity_weight: Number(ship.capacity_weight) || 1000,
-    });
-    setIsShipmentModalOpen(true);
-  };
-
-  const handleDeleteShipment = async (shipmentId: string) => {
-    const confirmDelete = window.confirm(
-      "Bạn có chắc chắn muốn xóa gom nhóm này? Tất cả đơn hàng trên xe sẽ được giải phóng quay lại kho bãi.",
-    );
-    if (!confirmDelete) return;
-
-    try {
-      await api.delete(`/shipments/${shipmentId}`);
-      setNotification({
-        type: "success",
-        message: "Xóa chuyến xe gom nhóm thành công!",
-      });
-      await loadCoreData(currentPage);
-    } catch (err: unknown) {
-      const apiError = err as { response?: { data?: { message?: string } } };
-      setNotification({
-        type: "error",
-        message: apiError.response?.data?.message || "Lỗi xóa chuyến xe!",
-      });
-    }
-  };
-
   // Filter Logic
   const filteredOrders = orders.filter((o) => {
-    // 7. Security Data Visibility: HUB_COORDINATOR can only see their hub's orders
-    if (
-      currentUser?.role === "HUB_COORDINATOR" &&
-      o.pickup_hub?.id !== currentUser?.hub?.id
-    ) {
-      return false;
-    }
-
     const matchesSearch =
-      o.tracking_number.toLowerCase().includes(orderSearch.toLowerCase()) ||
-      o.sender_name.toLowerCase().includes(orderSearch.toLowerCase()) ||
-      o.receiver_name.toLowerCase().includes(orderSearch.toLowerCase()) ||
-      o.receiver_phone.includes(orderSearch);
+      o.tracking_number?.toLowerCase().includes(orderSearch.toLowerCase()) ||
+      o.sender_name?.toLowerCase().includes(orderSearch.toLowerCase()) ||
+      o.receiver_name?.toLowerCase().includes(orderSearch.toLowerCase()) ||
+      o.receiver_phone?.includes(orderSearch);
 
     const matchesStatus =
       orderStatusFilter === "ALL" || o.current_status === orderStatusFilter;
@@ -808,17 +732,6 @@ export default function OrdersManagementPage() {
       orderHubFilter === "ALL" || o.pickup_hub?.id === orderHubFilter;
 
     return matchesSearch && matchesStatus && matchesHub;
-  });
-
-  const filteredShipments = shipments.filter((s) => {
-    const matchesSearch =
-      s.vehicle_number.toLowerCase().includes(shipmentSearch.toLowerCase()) ||
-      s.shipper.full_name.toLowerCase().includes(shipmentSearch.toLowerCase());
-
-    const matchesStatus =
-      shipmentStatusFilter === "ALL" || s.status === shipmentStatusFilter;
-
-    return matchesSearch && matchesStatus;
   });
 
   const getStatusStyle = (status: string) => {
@@ -858,6 +771,7 @@ export default function OrdersManagementPage() {
         return "Đã đóng bao/Lên tải";
       case "DELIVERING":
         return "Đang giao khách";
+      case "DELIVERED":
       case "FINISHED":
         return "Giao thành công";
       case "FAILED":
@@ -871,10 +785,6 @@ export default function OrdersManagementPage() {
       default:
         return status;
     }
-  };
-
-  const getShipmentWeight = (ship: Shipment) => {
-    return ship.orders.reduce((sum, o) => sum + Number(o.weight), 0);
   };
 
   return (
@@ -924,45 +834,13 @@ export default function OrdersManagementPage() {
           </div>
         </div>
 
-        {/* Tab selector and Action */}
+        {/* Actions */}
         <div className="flex items-center gap-3 self-end md:self-center">
-          {currentUser &&
-            currentUser.role !== "CUSTOMER" &&
-            currentUser.role !== "SHIPPER" && (
-              <div className="flex bg-slate-100 p-1.5 rounded-xl border border-slate-200 text-xs">
-                <button
-                  onClick={() => setActiveTab("ORDERS")}
-                  className={`px-4 py-2 font-bold rounded-lg transition-all cursor-pointer ${
-                    activeTab === "ORDERS"
-                      ? "bg-white text-blue-700 shadow-sm"
-                      : "text-slate-500 hover:text-slate-800"
-                  }`}
-                >
-                  Danh sách Đơn hàng
-                </button>
-                <button
-                  onClick={() => setActiveTab("SHIPMENTS")}
-                  className={`px-4 py-2 font-bold rounded-lg transition-all cursor-pointer ${
-                    activeTab === "SHIPMENTS"
-                      ? "bg-white text-blue-700 shadow-sm"
-                      : "text-slate-500 hover:text-slate-800"
-                  }`}
-                >
-                  Gom nhóm / Chuyến xe
-                </button>
-              </div>
-            )}
-
           <button
             onClick={() => {
-              if (activeTab === "ORDERS") {
-                // Sử dụng duy nhất modal Nhập Excel
-                setIsExcelImportModalOpen(true);
-              }
+              setIsExcelImportModalOpen(true);
             }}
-            className={`${
-              activeTab === "ORDERS" ? "flex" : "hidden"
-            } items-center gap-2 px-4 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold text-xs rounded-xl cursor-pointer transition-all border border-emerald-200`}
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold text-xs rounded-xl cursor-pointer transition-all border border-emerald-200"
           >
             <FileSpreadsheet className="w-4 h-4" />
             Nhập Excel tạo đơn
@@ -970,128 +848,56 @@ export default function OrdersManagementPage() {
 
           <button
             onClick={() => {
-              if (activeTab === "ORDERS") openCreateOrderModal();
-              else openCreateShipmentModal();
+              openCreateOrderModal();
             }}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-xl shadow-md cursor-pointer transition-all active:scale-[0.98]"
           >
             <Plus className="w-4 h-4" />
-            {activeTab === "ORDERS" ? "Tạo đơn hàng mới" : "Tạo gom nhóm"}
+            Tạo đơn hàng mới
           </button>
         </div>
       </div>
 
-      {/* TAB 1: ORDERS */}
-      {activeTab === "ORDERS" && (
-        <div className="space-y-4">
-          {/* Status Legend & Quick Filters */}
-          <div className="bg-white p-3 md:p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap gap-2 text-xs items-center">
-            <span className="font-bold text-slate-700 mr-2 flex items-center">
-              Chú thích & Lọc nhanh:
-            </span>
-            {[
-              {
-                status: "PENDING",
-                label: "Chờ lấy",
-                icon: "🔵",
-                desc: "Đơn mới tạo",
-              },
-              {
-                status: "PICKING",
-                label: "Đang đi lấy",
-                icon: "🟠",
-                desc: "Shipper đang di chuyển tới khách gửi",
-              },
-              {
-                status: "AT_HUB",
-                label: "Lưu kho bãi",
-                icon: "🔵",
-                desc: "Hàng đã nhập kho, chờ gom chuyến",
-              },
-              {
-                status: "IN_TRANSIT",
-                label: "Đã lên tải",
-                icon: "🟣",
-                desc: "Hàng đã vào bao/xe tải, chờ xuất bến",
-              },
-              {
-                status: "DELIVERING",
-                label: "Đang giao khách",
-                icon: "🚚",
-                desc: "Shipper đang trên đường giao",
-              },
-              {
-                status: "FINISHED",
-                label: "Giao thành công",
-                icon: "✅",
-                desc: "Hoàn tất đơn hàng",
-              },
-              {
-                status: "FAILED",
-                label: "Sự cố",
-                icon: "🔴",
-                desc: "Giao thất bại, chờ xử lý",
-              },
-            ].map((l) => (
-              <button
-                key={l.status}
-                onClick={() => setOrderStatusFilter(l.status)}
-                title={l.desc}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border transition-all ${
-                  orderStatusFilter === l.status
-                    ? "bg-blue-50 border-blue-200 text-blue-700 font-semibold"
-                    : "bg-white border-slate-200 hover:bg-slate-50 text-slate-600"
-                }`}
-              >
-                <span>{l.icon}</span>
-                <span>{l.label}</span>
-              </button>
-            ))}
-            <button
-              onClick={() => setOrderStatusFilter("ALL")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border transition-all ${
-                orderStatusFilter === "ALL"
-                  ? "bg-blue-50 border-blue-200 text-blue-700 font-semibold"
-                  : "bg-white border-slate-200 hover:bg-slate-50 text-slate-600"
-              }`}
-            >
-              <span>Tất cả</span>
-            </button>
+      <div className="space-y-4">
+        {/* Order Filters */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between">
+          <div className="relative w-full md:max-w-md">
+            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+              <Search className="w-4 h-4 text-slate-400" />
+            </div>
+            <input
+              type="text"
+              className="block w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 text-slate-800 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-xs"
+              placeholder="Tìm mã vận đơn, người gửi, người nhận, số điện thoại..."
+              value={orderSearch}
+              onChange={(e) => setOrderSearch(e.target.value)}
+            />
           </div>
 
-          {/* Order Filters */}
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between">
-            <div className="relative w-full md:max-w-md">
-              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                <Search className="w-4 h-4 text-slate-400" />
-              </div>
-              <input
-                type="text"
-                className="block w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 text-slate-800 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-xs"
-                placeholder="Tìm mã vận đơn, người gửi, người nhận, số điện thoại..."
-                value={orderSearch}
-                onChange={(e) => setOrderSearch(e.target.value)}
-              />
-            </div>
+          <div className="flex flex-wrap w-full md:w-auto gap-3 items-center">
+            {/* Status filter */}
+            <select
+              className="px-3 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 text-xs font-semibold"
+              value={orderStatusFilter}
+              onChange={(e) => setOrderStatusFilter(e.target.value)}
+            >
+              <option value="ALL">Tất cả trạng thái</option>
+              <option value="PENDING">Chờ lấy</option>
+              <option value="ASSIGNED">Đã điều phối</option>
+              <option value="PICKING">Đang đi lấy</option>
+              <option value="PICKED">Đã lấy hàng</option>
+              <option value="AT_HUB">Lưu kho bãi</option>
+              <option value="IN_TRANSIT">Đã đóng bao/Lên tải</option>
+              <option value="DELIVERING">Đang giao khách</option>
+              <option value="FINISHED">Giao thành công</option>
+              <option value="FAILED">Sự cố/Giao thất bại</option>
+              <option value="RETURNING">Chuyển hoàn</option>
+              <option value="RETURNED">Đã trả hàng</option>
+              <option value="CANCELLED">Đã hủy đơn</option>
+            </select>
 
-            <div className="flex flex-wrap w-full md:w-auto gap-3 items-center">
-              {/* Status filter */}
-              <select
-                className="px-3 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 text-xs font-semibold"
-                value={orderStatusFilter}
-                onChange={(e) => setOrderStatusFilter(e.target.value)}
-              >
-                <option value="ALL">Tất cả trạng thái</option>
-                <option value="PENDING">Chờ lấy</option>
-                <option value="AT_HUB">Lưu kho bãi</option>
-                <option value="DELIVERING">Đang giao khách</option>
-                <option value="IN_TRANSIT">Đã đóng bao/Lên tải</option>
-                <option value="FINISHED">Giao thành công</option>
-                <option value="FAILED">Sự cố/Giao thất bại</option>
-                <option value="RETURNING">Chuyển hoàn</option>
-              </select>
-
-              {/* Hub filter */}
+            {/* Hub filter (Hidden for Hub Coordinators) */}
+            {currentUser?.role !== "HUB_COORDINATOR" && (
               <select
                 className="px-3 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 text-xs font-semibold"
                 value={orderHubFilter}
@@ -1104,512 +910,333 @@ export default function OrdersManagementPage() {
                   </option>
                 ))}
               </select>
-            </div>
-          </div>
-
-          {/* Export / Filters */}
-          <div className="flex flex-col md:flex-row items-center gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm mt-4">
-            <div className="flex items-center gap-2 w-full md:w-auto">
-              <input
-                type="date"
-                value={exportDate}
-                onChange={(e) => setExportDate(e.target.value)}
-                className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
-              />
-              <button
-                onClick={handleExcelExport}
-                disabled={isLoading}
-                className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-lg cursor-pointer transition-all disabled:opacity-50"
-              >
-                <Download className="w-4 h-4 text-slate-500" />
-                Xuất Báo cáo
-              </button>
-            </div>
-            <div className="flex-1"></div>
-          </div>
-
-          {/* Orders Table */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            {isLoading ? (
-              <div className="p-16 text-center flex flex-col items-center justify-center gap-3">
-                <div className="w-8 h-8 border-3 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                <p className="text-slate-500 text-sm font-semibold">
-                  Đang tải danh sách đơn hàng...
-                </p>
-              </div>
-            ) : filteredOrders.length === 0 ? (
-              <div className="p-16 text-center text-slate-400 space-y-2">
-                <ClipboardList className="w-12 h-12 mx-auto text-slate-350" />
-                <p className="text-sm font-bold text-slate-800">
-                  Không tìm thấy đơn hàng nào
-                </p>
-                <p className="text-xs max-w-sm mx-auto text-slate-400">
-                  Hãy thử nhập từ khóa tìm kiếm khác hoặc nhấn &quot;Tạo đơn
-                  hàng mới&quot;.
-                </p>
-              </div>
-            ) : (
-              <>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="border-b border-slate-150 bg-slate-50/50 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                        <th className="px-6 py-4">Mã Vận Đơn</th>
-                        <th className="px-6 py-4">Người Gửi</th>
-                        <th className="px-6 py-4">Người Nhận & Nơi Đến</th>
-                        <th className="px-6 py-4">Thông số (kg / COD)</th>
-                        <th className="px-6 py-4">Trạng thái đơn</th>
-                        <th className="px-6 py-4">COD quỹ</th>
-                        <th className="px-6 py-4 text-right">
-                          Hành động vận hành / Quản lý
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 text-xs">
-                      {filteredOrders.map((item) => (
-                        <tr
-                          key={item.id}
-                          className="hover:bg-slate-50/50 transition-colors"
-                        >
-                          {/* Tracking number */}
-                          <td className="px-6 py-4">
-                            <span className="font-mono font-bold text-slate-900 block">
-                              {item.tracking_number}
-                            </span>
-                            <span className="text-[10px] text-slate-500 font-medium flex items-center gap-1 mt-1">
-                              <MapPin className="w-3 h-3 text-blue-500" />
-                              {item.pickup_hub?.name || "N/A"}
-                            </span>
-                          </td>
-
-                          {/* Sender */}
-                          <td className="px-6 py-4 space-y-0.5">
-                            <span className="font-semibold text-slate-800 block">
-                              {item.sender_name}
-                            </span>
-                            <span className="text-[10px] text-slate-400 block">
-                              {item.sender_phone}
-                            </span>
-                          </td>
-
-                          {/* Receiver */}
-                          <td className="px-6 py-4 space-y-0.5 max-w-xs">
-                            <span className="font-semibold text-slate-800 block">
-                              {item.receiver_name}
-                            </span>
-                            <span
-                              className="text-[10px] text-slate-450 truncate block"
-                              title={item.receiver_address}
-                            >
-                              {item.receiver_address}
-                            </span>
-                          </td>
-
-                          <td className="px-6 py-4 space-y-0.5">
-                            <span className="font-bold text-slate-700 block">
-                              {item.weight} kg{" "}
-                              {item.length && item.width && item.height
-                                ? `(${item.length}x${item.width}x${item.height}cm)`
-                                : ""}
-                            </span>
-                            <span className="text-[10px] text-blue-600 font-semibold block">
-                              COD: {item.cod_amount?.toLocaleString()} đ{" "}
-                              {item.cod_fee
-                                ? `(Phí: ${Number(item.cod_fee).toLocaleString()} đ)`
-                                : ""}
-                            </span>
-                            {item.shipping_fee && (
-                              <span className="text-[10px] text-slate-550 font-bold block">
-                                Ship:{" "}
-                                {Number(item.shipping_fee).toLocaleString()} đ
-                              </span>
-                            )}
-                          </td>
-
-                          {/* Order status */}
-                          <td className="px-6 py-4">
-                            <span
-                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-bold ${getStatusStyle(item.current_status)}`}
-                            >
-                              <span className="w-1.5 h-1.5 rounded-full bg-current" />
-                              {getStatusLabel(item.current_status)}
-                            </span>
-                          </td>
-
-                          {/* COD Remit status */}
-                          <td className="px-6 py-4">
-                            {item.cod_amount > 0 ? (
-                              <span
-                                className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                  item.cod_status === "REMITTED"
-                                    ? "bg-emerald-50 text-emerald-700"
-                                    : "bg-amber-50 text-amber-700"
-                                }`}
-                              >
-                                {item.cod_status === "REMITTED"
-                                  ? "Đã đối soát"
-                                  : "Chờ nộp"}
-                              </span>
-                            ) : (
-                              <span className="text-slate-400 italic">
-                                Không COD
-                              </span>
-                            )}
-                          </td>
-
-                          {/* Actions */}
-                          <td className="px-6 py-4 text-right space-y-1.5">
-                            {/* Operative Lifecycle Quick Buttons */}
-                            {currentUser &&
-                              currentUser.role !== "CUSTOMER" &&
-                              currentUser.role !== "SHIPPER" && (
-                                <div className="flex items-center justify-end gap-1.5">
-                                  {item.current_status === "PENDING" && (
-                                    <>
-                                      <button
-                                        onClick={() => {
-                                          setOrderToAssignShipper(item.id);
-                                          setSelectedShipperId(
-                                            shippers.length > 0
-                                              ? shippers[0].id
-                                              : "",
-                                          );
-                                          setIsAssignShipperModalOpen(true);
-                                        }}
-                                        className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 font-bold rounded text-[10px] cursor-pointer"
-                                        title="Gán tài xế đi lấy hàng"
-                                      >
-                                        Gán Shipper đi lấy
-                                      </button>
-                                      <button
-                                        onClick={() =>
-                                          handleQuickScanIn(
-                                            item.tracking_number,
-                                          )
-                                        }
-                                        className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded text-[10px] cursor-pointer"
-                                        title="Quét nhập kho bưu cục bãi lấy hàng"
-                                      >
-                                        Nhập kho bãi
-                                      </button>
-                                    </>
-                                  )}
-
-                                  {item.current_status === "AT_HUB" && (
-                                    <>
-                                      <button
-                                        onClick={() =>
-                                          openAssignShipmentModal(item.id)
-                                        }
-                                        className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-bold rounded text-[10px] cursor-pointer flex items-center gap-1"
-                                      >
-                                        <Truck className="w-3 h-3" />
-                                        Gom nhóm xe
-                                      </button>
-                                      {(currentUser?.role ===
-                                        "HUB_COORDINATOR" ||
-                                        currentUser?.role === "ADMIN") && (
-                                        <button
-                                          onClick={() => {
-                                            setPutawayOrderId(item.id);
-                                            setPutawayOrderTracking(
-                                              item.tracking_number,
-                                            );
-                                            setPutawayBarcode("");
-                                            setIsPutawayModalOpen(true);
-                                          }}
-                                          className="px-2 py-1 bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 font-bold rounded text-[10px] cursor-pointer flex items-center gap-1"
-                                        >
-                                          <MapPin className="w-3 h-3" />
-                                          Xếp kệ
-                                        </button>
-                                      )}
-                                    </>
-                                  )}
-
-                                  {(item.current_status === "DELIVERING" ||
-                                    item.current_status === "FAILED") && (
-                                    <>
-                                      <button
-                                        onClick={() =>
-                                          handleQuickRetry(item.id)
-                                        }
-                                        className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 font-bold rounded text-[10px] cursor-pointer"
-                                      >
-                                        Giao lại
-                                      </button>
-                                      <button
-                                        onClick={() => handleQuickRts(item.id)}
-                                        className="px-2 py-1 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 font-bold rounded text-[10px] cursor-pointer"
-                                      >
-                                        Chuyển hoàn
-                                      </button>
-                                    </>
-                                  )}
-
-                                  {item.current_status === "FINISHED" &&
-                                    item.cod_status === "PENDING" &&
-                                    item.cod_amount > 0 && (
-                                      <button
-                                        onClick={() =>
-                                          handleQuickRemit(item.id)
-                                        }
-                                        className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded text-[10px] cursor-pointer flex items-center gap-1"
-                                      >
-                                        <Check className="w-3 h-3" />
-                                        Nộp quỹ COD
-                                      </button>
-                                    )}
-                                </div>
-                              )}
-
-                            {/* Detail / Edit / Delete buttons */}
-                            <div className="flex items-center justify-end gap-1.5 text-slate-400">
-                              <button
-                                onClick={() => {
-                                  setSelectedOrder(item);
-                                  setIsDetailModalOpen(true);
-                                }}
-                                className="p-1 hover:text-slate-800 cursor-pointer"
-                                title="Chi tiết đơn hàng"
-                              >
-                                <Eye className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => handlePrintLabel(item.id)}
-                                className="p-1 hover:text-blue-600 cursor-pointer"
-                                title="In nhãn vận đơn"
-                              >
-                                <Printer className="w-4 h-4" />
-                              </button>
-                              {(item.current_status === "PENDING" ||
-                                item.current_status === "AT_HUB") &&
-                                !item.shipment && (
-                                  <>
-                                    <button
-                                      onClick={() => openEditOrderModal(item)}
-                                      className="p-1 hover:text-blue-600 cursor-pointer"
-                                      title="Chỉnh sửa đơn hàng"
-                                    >
-                                      <Edit2 className="w-4 h-4" />
-                                    </button>
-                                    <button
-                                      onClick={() => handleDeleteOrder(item.id)}
-                                      className="p-1 hover:text-red-650 cursor-pointer"
-                                      title="Xóa đơn hàng (soft delete)"
-                                    >
-                                      <Trash2 className="w-4 h-4" />
-                                    </button>
-                                  </>
-                                )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <Pagination
-                  currentPage={currentPage}
-                  totalPages={totalPages}
-                  totalItems={totalItems}
-                  itemsPerPage={itemsPerPage}
-                  onPageChange={setCurrentPage}
-                />
-              </>
             )}
           </div>
         </div>
-      )}
 
-      {/* TAB 2: SHIPMENTS (Gom nhóm) */}
-      {activeTab === "SHIPMENTS" && (
-        <div className="space-y-4">
-          {/* Shipment Filters */}
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between">
-            <div className="relative w-full md:max-w-md">
-              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                <Search className="w-4 h-4 text-slate-400" />
-              </div>
-              <input
-                type="text"
-                className="block w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 text-slate-800 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-xs"
-                placeholder="Tìm biển số xe hoặc tài xế..."
-                value={shipmentSearch}
-                onChange={(e) => setShipmentSearch(e.target.value)}
-              />
-            </div>
-
-            <select
-              className="px-3 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 text-xs font-semibold"
-              value={shipmentStatusFilter}
-              onChange={(e) => setShipmentStatusFilter(e.target.value)}
+        {/* Export / Filters */}
+        <div className="flex flex-col md:flex-row items-center gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm mt-4">
+          <div className="flex items-center gap-2 w-full md:w-auto">
+            <input
+              type="date"
+              value={exportDate}
+              onChange={(e) => setExportDate(e.target.value)}
+              className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+            />
+            <button
+              onClick={handleExcelExport}
+              disabled={isLoading}
+              className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-lg cursor-pointer transition-all disabled:opacity-50"
             >
-              <option value="ALL">Tất cả trạng thái chuyến</option>
-              <option value="PENDING">Chờ gom hàng (PENDING)</option>
-              <option value="IN_TRANSIT">Đang di chuyển (IN_TRANSIT)</option>
-              <option value="COMPLETED">Đã cập bến (COMPLETED)</option>
-            </select>
+              <Download className="w-4 h-4 text-slate-500" />
+              Xuất Báo cáo
+            </button>
           </div>
+          <div className="flex-1"></div>
+        </div>
 
-          {/* Shipment Cards Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {isLoading ? (
-              <div className="md:col-span-2 p-16 text-center flex flex-col items-center justify-center gap-3">
-                <div className="w-8 h-8 border-3 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                <p className="text-slate-500 text-sm font-semibold">
-                  Đang tải danh sách gom nhóm...
-                </p>
-              </div>
-            ) : filteredShipments.length === 0 ? (
-              <div className="md:col-span-2 p-16 text-center bg-white rounded-2xl border border-slate-200 shadow-sm">
-                <Truck className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                <h3 className="text-sm font-bold text-slate-800">
-                  Chưa có gom nhóm chuyến xe nào được tạo
-                </h3>
-                <p className="text-xs text-slate-450 mt-1">
-                  Hãy click &quot;Tạo gom nhóm&quot; để thiết lập xe chuyển hàng
-                  liên bưu cục.
-                </p>
-              </div>
-            ) : (
-              filteredShipments.map((ship) => {
-                const totalWeight = getShipmentWeight(ship);
-                const maxWeight = Number(ship.capacity_weight) || 1000;
-                const fillRate = Math.min(
-                  Math.round((totalWeight / maxWeight) * 100),
-                  100,
-                );
-
-                return (
-                  <div
-                    key={ship.id}
-                    className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col justify-between"
-                  >
-                    <div className="p-5 space-y-4">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h3 className="text-md font-extrabold text-slate-800">
-                              {ship.vehicle_number}
-                            </h3>
-                            {ship.shipment_code && (
-                              <span className="text-[10px] font-mono font-bold text-blue-700 bg-blue-50/50 px-2 py-0.5 rounded border border-blue-200">
-                                {ship.shipment_code}
-                              </span>
+        {/* Orders Table */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          {isLoading ? (
+            <div className="p-16 text-center flex flex-col items-center justify-center gap-3">
+              <div className="w-8 h-8 border-3 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+              <p className="text-slate-500 text-sm font-semibold">
+                Đang tải danh sách đơn hàng...
+              </p>
+            </div>
+          ) : filteredOrders.length === 0 ? (
+            <div className="p-16 text-center text-slate-400 space-y-2">
+              <ClipboardList className="w-12 h-12 mx-auto text-slate-350" />
+              <p className="text-sm font-bold text-slate-800">
+                Không tìm thấy đơn hàng nào
+              </p>
+              <p className="text-xs max-w-sm mx-auto text-slate-400">
+                Hãy thử nhập từ khóa tìm kiếm khác hoặc nhấn &quot;Tạo đơn hàng
+                mới&quot;.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-150 bg-slate-50/50 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                      <th className="px-6 py-4">Mã Vận Đơn</th>
+                      <th className="px-6 py-4">Người Gửi</th>
+                      <th className="px-6 py-4">Người Nhận & Nơi Đến</th>
+                      <th className="px-6 py-4">Thông số (kg / COD)</th>
+                      <th className="px-6 py-4">Trạng thái đơn</th>
+                      <th className="px-6 py-4">COD quỹ</th>
+                      <th className="px-6 py-4 text-right">
+                        Hành động vận hành / Quản lý
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-xs">
+                    {filteredOrders.map((item) => (
+                      <tr
+                        key={item.id}
+                        className="hover:bg-slate-50/50 transition-colors"
+                      >
+                        {/* Tracking number */}
+                        <td className="px-6 py-4">
+                          <span className="font-mono font-bold text-slate-900 block">
+                            {item.tracking_number}
+                          </span>
+                          <span className="text-[10px] text-slate-500 font-medium flex items-center gap-1 mt-1">
+                            {currentUser?.role === "ADMIN" ? (
+                              <>
+                                <MapPin className="w-3 h-3 text-blue-500" />
+                                {item.pickup_hub?.name || "N/A"}
+                              </>
+                            ) : (
+                              <>
+                                <Layers className="w-3 h-3 text-blue-500" />
+                                {item.location
+                                  ? `Khu ${item.location.zone} - Kệ ${item.location.aisle}-${item.location.shelf}-${item.location.bin}`
+                                  : "Chưa xếp kệ"}
+                              </>
                             )}
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-medium block mt-1">
+                            {new Date(item.created_at).toLocaleDateString(
+                              "vi-VN",
+                            )}
+                          </span>
+                        </td>
+
+                        {/* Sender */}
+                        <td className="px-6 py-4 space-y-0.5">
+                          <span className="font-semibold text-slate-800 block">
+                            {item.sender_name}
+                          </span>
+                          <span className="text-[10px] text-slate-400 block">
+                            {item.sender_phone}
+                          </span>
+                        </td>
+
+                        {/* Receiver */}
+                        <td className="px-6 py-4 space-y-0.5 max-w-xs">
+                          <span className="font-semibold text-slate-800 block">
+                            {item.receiver_name}
+                          </span>
+                          <span
+                            className="text-[10px] text-slate-450 truncate block"
+                            title={item.receiver_address}
+                          >
+                            {item.receiver_address}
+                          </span>
+                        </td>
+
+                        <td className="px-6 py-4 space-y-0.5">
+                          <span className="font-bold text-slate-700 block">
+                            {item.weight} kg{" "}
+                            {item.length && item.width && item.height
+                              ? `(${item.length}x${item.width}x${item.height}cm)`
+                              : ""}
+                          </span>
+                          <span className="text-[10px] text-blue-600 font-semibold block">
+                            COD: {item.cod_amount?.toLocaleString()} đ{" "}
+                            {item.cod_fee
+                              ? `(Phí: ${Number(item.cod_fee).toLocaleString()} đ)`
+                              : ""}
+                          </span>
+                          {item.shipping_fee && (
+                            <span className="text-[10px] text-slate-550 font-bold block">
+                              Ship: {Number(item.shipping_fee).toLocaleString()}{" "}
+                              đ
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Order status */}
+                        <td className="px-6 py-4">
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-bold ${getStatusStyle(item.current_status)}`}
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                            {getStatusLabel(item.current_status)}
+                          </span>
+                        </td>
+
+                        {/* COD Remit status */}
+                        <td className="px-6 py-4">
+                          {item.cod_amount > 0 ? (
                             <span
-                              className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                                ship.status === "PENDING"
-                                  ? "bg-slate-100 text-slate-700"
-                                  : "bg-blue-50 text-blue-700"
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                item.cod_status === "REMITTED"
+                                  ? "bg-emerald-50 text-emerald-700"
+                                  : "bg-amber-50 text-amber-700"
                               }`}
                             >
-                              {ship.status}
+                              {item.cod_status === "REMITTED"
+                                ? "Đã đối soát"
+                                : "Chờ nộp"}
                             </span>
-                          </div>
-                          <span className="text-[10px] text-slate-400 font-semibold block mt-1">
-                            Tạo ngày:{" "}
-                            {new Date(ship.created_at).toLocaleDateString()}
-                          </span>
-                        </div>
+                          ) : (
+                            <span className="text-slate-400 italic">
+                              Không COD
+                            </span>
+                          )}
+                        </td>
 
-                        {/* Shipment Action Menu */}
-                        {ship.status === "PENDING" && (
-                          <div className="flex gap-2">
+                        {/* Actions */}
+                        <td className="px-6 py-4 text-right space-y-1.5">
+                          {/* Operative Lifecycle Quick Buttons */}
+                          {currentUser && currentUser.role !== "SHIPPER" && (
+                            <div className="flex items-center justify-end gap-1.5">
+                              {item.current_status === "PENDING" && (
+                                <>
+                                  <button
+                                    onClick={() => {
+                                      setOrderToAssignShipper(item.id);
+                                      setSelectedShipperId(
+                                        shippers.length > 0
+                                          ? shippers[0].id
+                                          : "",
+                                      );
+                                      setIsAssignShipperModalOpen(true);
+                                    }}
+                                    className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 font-bold rounded text-[10px] cursor-pointer"
+                                    title="Gán tài xế đi lấy hàng"
+                                  >
+                                    Gán Shipper đi lấy
+                                  </button>
+                                  <button
+                                    onClick={() =>
+                                      handleQuickScanIn(item.tracking_number)
+                                    }
+                                    className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded text-[10px] cursor-pointer"
+                                    title="Quét nhập kho bưu cục bãi lấy hàng"
+                                  >
+                                    Nhập kho bãi
+                                  </button>
+                                </>
+                              )}
+
+                              {item.current_status === "AT_HUB" && (
+                                <>
+                                  <button
+                                    onClick={() =>
+                                      openAssignShipmentModal(item.id)
+                                    }
+                                    className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-bold rounded text-[10px] cursor-pointer flex items-center gap-1"
+                                  >
+                                    <Truck className="w-3 h-3" />
+                                    Gom nhóm xe
+                                  </button>
+                                  {(currentUser?.role === "HUB_COORDINATOR" ||
+                                    currentUser?.role === "ADMIN") && (
+                                    <button
+                                      onClick={() => {
+                                        setPutawayOrderId(item.id);
+                                        setPutawayOrderTracking(
+                                          item.tracking_number,
+                                        );
+                                        setPutawayOrderHubId(
+                                          item.pickup_hub?.id || "",
+                                        );
+                                        setPutawayBarcode("");
+                                        setIsPutawayModalOpen(true);
+                                      }}
+                                      className="px-2 py-1 bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 font-bold rounded text-[10px] cursor-pointer flex items-center gap-1"
+                                    >
+                                      <MapPin className="w-3 h-3" />
+                                      Xếp kệ
+                                    </button>
+                                  )}
+                                </>
+                              )}
+
+                              {(item.current_status === "DELIVERING" ||
+                                item.current_status === "FAILED") && (
+                                <>
+                                  <button
+                                    onClick={() => handleQuickRetry(item.id)}
+                                    className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 font-bold rounded text-[10px] cursor-pointer"
+                                  >
+                                    Giao lại
+                                  </button>
+                                  <button
+                                    onClick={() => handleQuickRts(item.id)}
+                                    className="px-2 py-1 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 font-bold rounded text-[10px] cursor-pointer"
+                                  >
+                                    Chuyển hoàn
+                                  </button>
+                                </>
+                              )}
+
+                              {item.current_status === "FINISHED" &&
+                                item.cod_status === "PENDING" &&
+                                item.cod_amount > 0 && (
+                                  <button
+                                    onClick={() => handleQuickRemit(item.id)}
+                                    className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded text-[10px] cursor-pointer flex items-center gap-1"
+                                  >
+                                    <Check className="w-3 h-3" />
+                                    Nộp quỹ COD
+                                  </button>
+                                )}
+                            </div>
+                          )}
+
+                          {/* Detail / Edit / Delete buttons */}
+                          <div className="flex items-center justify-end gap-1.5 text-slate-400">
                             <button
-                              onClick={() => openEditShipmentModal(ship)}
-                              className="p-1.5 bg-slate-105 hover:bg-slate-200 border border-slate-250 rounded-lg text-slate-650 cursor-pointer"
-                              title="Sửa thông tin gom nhóm"
+                              onClick={() => {
+                                setSelectedOrder(item);
+                                setIsDetailModalOpen(true);
+                              }}
+                              className="p-1 hover:text-slate-800 cursor-pointer"
+                              title="Chi tiết đơn hàng"
                             >
-                              <Edit2 className="w-3.5 h-3.5" />
+                              <Eye className="w-4 h-4" />
                             </button>
                             <button
-                              onClick={() => handleDeleteShipment(ship.id)}
-                              className="p-1.5 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg text-red-650 cursor-pointer"
-                              title="Hủy/Xóa gom nhóm"
+                              onClick={() => handlePrintLabel(item.id)}
+                              className="p-1 hover:text-blue-600 cursor-pointer"
+                              title="In nhãn vận đơn"
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
+                              <Printer className="w-4 h-4" />
                             </button>
+                            {(item.current_status === "PENDING" ||
+                              item.current_status === "AT_HUB") &&
+                              !item.shipment && (
+                                <>
+                                  <button
+                                    onClick={() => openEditOrderModal(item)}
+                                    className="p-1 hover:text-blue-600 cursor-pointer"
+                                    title="Chỉnh sửa đơn hàng"
+                                  >
+                                    <Edit2 className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteOrder(item.id)}
+                                    className="p-1 hover:text-red-650 cursor-pointer"
+                                    title="Xóa đơn hàng (soft delete)"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </>
+                              )}
                           </div>
-                        )}
-                      </div>
-
-                      {/* Hub route */}
-                      <div className="flex items-center gap-2 p-3 bg-slate-50 border border-slate-150 rounded-xl text-xs font-semibold text-slate-700">
-                        <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                        <span>{ship.origin_hub.name}</span>
-                        <ArrowRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                        <MapPin className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-                        <span>
-                          {ship.destination_hub?.name || "Địa chỉ khách"}
-                        </span>
-                      </div>
-
-                      {/* Driver info */}
-                      <div className="flex items-center gap-2.5 text-xs text-slate-650">
-                        <User className="w-4 h-4 text-slate-400" />
-                        <span>
-                          Tài xế:{" "}
-                          <strong className="text-slate-800">
-                            {ship.shipper.full_name}
-                          </strong>{" "}
-                          ({ship.shipper.phone_number})
-                        </span>
-                      </div>
-
-                      {/* Weight progress bar */}
-                      <div className="space-y-1">
-                        <div className="flex justify-between text-[10px] text-slate-500 font-bold">
-                          <span>Khối lượng đã xếp:</span>
-                          <span
-                            className={
-                              fillRate >= 80
-                                ? "text-emerald-600"
-                                : "text-blue-600"
-                            }
-                          >
-                            {totalWeight}kg / {maxWeight}kg ({fillRate}%)
-                          </span>
-                        </div>
-                        <div className="w-full bg-slate-150 h-1.5 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full transition-all duration-500 ${fillRate >= 80 ? "bg-emerald-500" : "bg-blue-500"}`}
-                            style={{ width: `${fillRate}%` }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Assigned orders */}
-                    <div className="border-t border-slate-150 bg-slate-50/50 p-4 space-y-2">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                        Các kiện hàng đã gom ({ship.orders.length})
-                      </span>
-                      {ship.orders.length === 0 ? (
-                        <span className="text-xs text-slate-400 italic block py-1">
-                          Không có kiện hàng nào.
-                        </span>
-                      ) : (
-                        <div className="flex flex-wrap gap-1">
-                          {ship.orders.map((o) => (
-                            <span
-                              key={o.id}
-                              className="inline-block px-2 py-0.5 bg-white border border-slate-200 rounded text-[9px] font-mono text-slate-700"
-                            >
-                              {o.tracking_number} ({o.weight}kg)
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                totalItems={totalItems}
+                itemsPerPage={itemsPerPage}
+                onPageChange={setCurrentPage}
+              />
+            </>
+          )}
         </div>
-      )}
+      </div>
 
       {/* MODAL 1: TẠO / SỬA ĐƠN HÀNG */}
       {isOrderModalOpen && (
@@ -1973,136 +1600,6 @@ export default function OrdersManagementPage() {
         </div>
       )}
 
-      {/* MODAL 2: TẠO / SỬA GOM NHÓM (Shipment) */}
-      {isShipmentModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn">
-          <div className="bg-white rounded-2xl w-full max-w-md border border-slate-200 shadow-2xl relative overflow-hidden">
-            <div className="p-6 border-b border-slate-150 flex justify-between items-center bg-slate-50/50">
-              <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                <Truck className="w-5 h-5 text-blue-600" />
-                {isShipmentEditMode
-                  ? `Cấu hình lại chuyến xe ${selectedShipment?.vehicle_number}`
-                  : "Tạo gom nhóm chuyến xe mới"}
-              </h2>
-              <button
-                onClick={() => setIsShipmentModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleShipmentSubmit} className="p-6 space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">
-                  Biển số xe
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ví dụ: 29C-888.88"
-                  className="block w-full px-3 py-2 bg-slate-50 border border-slate-250 text-slate-800 text-xs rounded-xl focus:border-blue-500 outline-none"
-                  value={shipmentForm.vehicle_number}
-                  onChange={(e) =>
-                    setShipmentForm({
-                      ...shipmentForm,
-                      vehicle_number: e.target.value,
-                    })
-                  }
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">
-                  Chọn Shipper phụ trách
-                </label>
-                <select
-                  required
-                  className="block w-full px-3 py-2 bg-slate-50 border border-slate-250 text-slate-700 text-xs rounded-xl outline-none"
-                  value={shipmentForm.shipper_id}
-                  onChange={(e) =>
-                    setShipmentForm({
-                      ...shipmentForm,
-                      shipper_id: e.target.value,
-                    })
-                  }
-                >
-                  <option value="">-- Chọn tài xế --</option>
-                  {shippers.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.full_name} ({s.phone_number})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">
-                  Trạm cập bến (Đích)
-                </label>
-                <select
-                  className="block w-full px-3 py-2 bg-slate-50 border border-slate-250 text-slate-700 text-xs rounded-xl outline-none"
-                  value={shipmentForm.destination_hub_id}
-                  onChange={(e) =>
-                    setShipmentForm({
-                      ...shipmentForm,
-                      destination_hub_id: e.target.value,
-                    })
-                  }
-                >
-                  <option value="">
-                    -- Giao thẳng tới khách (Chặng cuối) --
-                  </option>
-                  {hubs
-                    .filter((h) => h.id !== currentUser?.hub?.id)
-                    .map((h) => (
-                      <option key={h.id} value={h.id}>
-                        {h.name}
-                      </option>
-                    ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">
-                  Tải trọng xe tối đa (kg)
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  required
-                  className="block w-full px-3 py-2 bg-slate-50 border border-slate-250 text-slate-800 text-xs rounded-xl outline-none"
-                  value={shipmentForm.capacity_weight}
-                  onChange={(e) =>
-                    setShipmentForm({
-                      ...shipmentForm,
-                      capacity_weight: Number(e.target.value),
-                    })
-                  }
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-4 border-t border-slate-150">
-                <button
-                  type="button"
-                  onClick={() => setIsShipmentModalOpen(false)}
-                  className="px-4 py-2 border border-slate-250 text-slate-700 text-xs font-semibold rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
-                >
-                  Hủy
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitLoading}
-                  className="flex items-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-xl shadow-md cursor-pointer transition-all active:scale-[0.98] disabled:opacity-50"
-                >
-                  {isSubmitLoading ? "Đang xử lý..." : "Lưu chuyến xe"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
       {/* MODAL 3: XẾP ĐƠN HÀNG VÀO GOM NHÓM (Shipment assignment) */}
       {isAssignShipmentOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn">
@@ -2444,10 +1941,10 @@ export default function OrdersManagementPage() {
               <div>
                 <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
                   <MapPin className="w-4 h-4 text-teal-600" />
-                  X\u1ebfp k\u1ec7 h\u00e0ng
+                  Xếp kệ hàng
                 </h2>
                 <p className="text-[10px] text-slate-400 mt-0.5 font-mono">
-                  \u0110\u01a1n: {putawayOrderTracking}
+                  Đơn: {putawayOrderTracking}
                 </p>
               </div>
               <button
@@ -2460,12 +1957,13 @@ export default function OrdersManagementPage() {
             <div className="p-5 space-y-4">
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                  M\u00e3 v\u1ea1ch v\u1ecb tr\u00ed k\u1ec7 (Barcode)
+                  Mã vạch vị trí kệ (Barcode)
                 </label>
                 <input
+                  list="locations-list"
                   type="text"
                   autoFocus
-                  placeholder="V\u00ed d\u1ee5: LOC-A-01-1-A"
+                  placeholder="Ví dụ: LOC-A-01-1-A"
                   className="block w-full px-3.5 py-2.5 bg-slate-50 border border-slate-250 text-slate-800 rounded-xl focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none text-sm font-mono"
                   value={putawayBarcode}
                   onChange={(e) =>
@@ -2483,7 +1981,7 @@ export default function OrdersManagementPage() {
                           setIsPutawayModalOpen(false);
                           setNotification({
                             type: "success",
-                            message: `\u0110\u00e3 x\u1ebfp \u0111\u01a1n ${putawayOrderTracking} v\u00e0o v\u1ecb tr\u00ed ${putawayBarcode}!`,
+                            message: `Đã xếp đơn ${putawayOrderTracking} vào vị trí ${putawayBarcode}!`,
                           });
                           await loadCoreData(currentPage);
                         } catch (err) {
@@ -2491,8 +1989,7 @@ export default function OrdersManagementPage() {
                             setNotification({
                               type: "error",
                               message:
-                                err.response?.data?.message ||
-                                "L\u1ed7i x\u1ebfp k\u1ec7!",
+                                err.response?.data?.message || "Lỗi xếp kệ!",
                             });
                           }
                           setIsPutawayModalOpen(false);
@@ -2503,9 +2000,19 @@ export default function OrdersManagementPage() {
                     }
                   }}
                 />
+                <datalist id="locations-list">
+                  {availableLocations.map((loc) => {
+                    const currentOrders = loc.orders?.length || 0;
+                    return (
+                      <option key={loc.id} value={loc.barcode}>
+                        {`Khu ${loc.zone} - Kệ ${loc.aisle}-${loc.shelf}-${loc.bin} (${currentOrders}/${loc.max_capacity})`}
+                      </option>
+                    );
+                  })}
+                </datalist>
                 <p className="text-[10px] text-slate-400 mt-1.5">
-                  Nh\u1eadp m\u00e3 barcode c\u1ee7a k\u1ec7 v\u00e0 nh\u1ea5n
-                  Enter \u0111\u1ec3 x\u00e1c nh\u1eadn
+                  Nhập mã barcode của kệ (hoặc chọn từ danh sách trống) và nhấn
+                  Enter để xác nhận
                 </p>
               </div>
               <div className="flex justify-end gap-2 pt-2">
@@ -2513,7 +2020,7 @@ export default function OrdersManagementPage() {
                   onClick={() => setIsPutawayModalOpen(false)}
                   className="px-4 py-2 border border-slate-255 text-slate-700 font-semibold text-xs rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
                 >
-                  H\u1ee7y
+                  Hủy
                 </button>
                 <button
                   disabled={!putawayBarcode.trim() || isPutawayLoading}
@@ -2526,16 +2033,14 @@ export default function OrdersManagementPage() {
                       setIsPutawayModalOpen(false);
                       setNotification({
                         type: "success",
-                        message: `\u0110\u00e3 x\u1ebfp \u0111\u01a1n ${putawayOrderTracking} v\u00e0o v\u1ecb tr\u00ed ${putawayBarcode}!`,
+                        message: `Đã xếp đơn ${putawayOrderTracking} vào vị trí ${putawayBarcode}!`,
                       });
                       await loadCoreData(currentPage);
                     } catch (err) {
                       if (axios.isAxiosError(err)) {
                         setNotification({
                           type: "error",
-                          message:
-                            err.response?.data?.message ||
-                            "L\u1ed7i x\u1ebfp k\u1ec7!",
+                          message: err.response?.data?.message || "Lỗi xếp kệ!",
                         });
                       }
                       setIsPutawayModalOpen(false);
@@ -2546,9 +2051,7 @@ export default function OrdersManagementPage() {
                   className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs rounded-xl cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                   <MapPin className="w-3.5 h-3.5" />
-                  {isPutawayLoading
-                    ? "\u0110ang x\u1ebfp..."
-                    : "X\u00e1c nh\u1eadn X\u1ebfp k\u1ec7"}
+                  {isPutawayLoading ? "Đang xếp..." : "Xác nhận Xếp kệ"}
                 </button>
               </div>
             </div>

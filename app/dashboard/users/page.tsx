@@ -35,7 +35,7 @@ interface User {
   phone_number: string;
   address?: string;
   full_name: string;
-  role: "ADMIN" | "SHIPPER" | "HUB_COORDINATOR" | "CUSTOMER";
+  role: "ADMIN" | "SHIPPER" | "HUB_COORDINATOR";
   status: string;
   created_at: string;
   hub?: Hub | null;
@@ -70,7 +70,7 @@ export default function UsersManagementPage() {
     phone_number: "",
     password: "",
     fullName: "",
-    role: "SHIPPER" as "ADMIN" | "SHIPPER" | "HUB_COORDINATOR" | "CUSTOMER",
+    role: "SHIPPER" as "ADMIN" | "SHIPPER" | "HUB_COORDINATOR",
     hubId: "",
     status: "ACTIVE",
   });
@@ -366,8 +366,7 @@ export default function UsersManagementPage() {
         return "Shipper giao hàng";
       case "HUB_COORDINATOR":
         return "Điều phối viên";
-      case "CUSTOMER":
-        return "Khách hàng";
+
       default:
         return role;
     }
@@ -489,7 +488,6 @@ export default function UsersManagementPage() {
             <option value="ADMIN">Quản trị viên (Admin)</option>
             <option value="SHIPPER">Shipper giao hàng</option>
             <option value="HUB_COORDINATOR">Điều phối viên bưu cục</option>
-            <option value="CUSTOMER">Khách hàng</option>
           </select>
         </div>
 
@@ -504,11 +502,7 @@ export default function UsersManagementPage() {
           <div className="bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm flex items-center gap-2">
             <span className="text-slate-500">Nhân viên hoạt động:</span>
             <span className="text-emerald-600 font-bold text-sm">
-              {
-                users.filter(
-                  (u) => u.role !== "CUSTOMER" && u.status === "ACTIVE",
-                ).length
-              }
+              {users.filter((u) => u.status === "ACTIVE").length}
             </span>
           </div>
         </div>

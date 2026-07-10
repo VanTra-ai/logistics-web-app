@@ -161,27 +161,6 @@ export default function DashboardLayout({
       ];
     }
 
-    // 4. CUSTOMER — Chủ shop / Khách hàng gửi hàng
-    if (role === "CUSTOMER") {
-      return [
-        {
-          name: "Bảng điều khiển",
-          href: "/dashboard",
-          icon: LayoutDashboard,
-        },
-        {
-          name: "Quản lý Đơn hàng",
-          href: "/dashboard/orders",
-          icon: Package,
-        },
-        {
-          name: "Hỗ trợ & Khiếu nại",
-          href: "/dashboard/tickets",
-          icon: AlertCircle,
-        },
-      ];
-    }
-
     // Fallback: hiển thị tối thiểu cho các role chưa xác định
     return [{ name: "Tổng quan", href: "/dashboard", icon: LayoutDashboard }];
   };
