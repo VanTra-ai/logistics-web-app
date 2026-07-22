@@ -16,12 +16,13 @@ import {
   User,
   Users,
   ScanLine,
-  AlertCircle,
   MapPin,
   ClipboardList,
   AlertTriangle,
   Wallet,
   DollarSign,
+  Car,
+  TrendingUp,
 } from "lucide-react";
 import api from "@/lib/axios";
 import { io } from "socket.io-client";
@@ -68,32 +69,46 @@ export default function DashboardLayout({
     // 1. ADMIN — Quản trị tổng hệ thống
     if (role === "ADMIN") {
       return [
-        { name: "Tổng quan", href: "/dashboard", icon: LayoutDashboard },
+        {
+          name: "Tổng quan Hệ thống",
+          href: "/dashboard",
+          icon: LayoutDashboard,
+        },
         { name: "Quản lý Đơn hàng", href: "/dashboard/orders", icon: Package },
-        { name: "Hệ thống Bưu cục", href: "/dashboard/hubs", icon: Building2 },
+        {
+          name: "Điều phối Phương tiện",
+          href: "/dashboard/dispatch",
+          icon: Truck,
+        },
+        { name: "Quản lý Bưu cục", href: "/dashboard/hubs", icon: Building2 },
         { name: "Quản lý Nhân sự", href: "/dashboard/users", icon: Users },
         {
-          name: "Quản lý Sự cố",
+          name: "Quản lý Phương tiện",
+          href: "/dashboard/vehicles",
+          icon: Car,
+        },
+        {
+          name: "Quản lý Sự cố & Ngoại lệ",
           href: "/dashboard/incidents",
           icon: AlertTriangle,
         },
-        // {
-        //   name: "Khiếu nại (Tickets)",
-        //   href: "/dashboard/tickets",
-        //   icon: AlertCircle,
-        // },
         {
-          name: "Ví / Đối soát",
+          name: "Quản lý Ví & Nợ COD",
           href: "/dashboard/finance/wallets",
           icon: Wallet,
         },
         {
-          name: "Tài chính & Biểu phí",
+          name: "Dòng tiền & Biểu phí",
           href: "/dashboard/finance",
           icon: DollarSign,
         },
         {
-          name: "Nhật ký hệ thống",
+          name: "Báo cáo & Phân tích BI",
+          href: "/dashboard/reports",
+          icon: TrendingUp,
+        },
+        {
+          name: "Nhật ký Hệ thống",
           href: "/dashboard/audit-logs",
           icon: ClipboardList,
         },
@@ -113,32 +128,15 @@ export default function DashboardLayout({
           href: "/dashboard/orders",
           icon: Package,
         },
-        { name: "Trạm xử lý đơn", href: "/dashboard/station", icon: ScanLine },
         {
-          name: "Điều phối Chuyến xe",
+          name: "Điều phối Phương tiện",
           href: "/dashboard/dispatch",
           icon: Truck,
         },
-        // { name: "TMS Dashboard", href: "/dashboard/tms", icon: MapPin },
         {
-          name: "Quản lý Sự cố",
-          href: "/dashboard/incidents",
-          icon: AlertTriangle,
-        },
-        // {
-        //   name: "Khiếu nại (Tickets)",
-        //   href: "/dashboard/tickets",
-        //   icon: AlertCircle,
-        // },
-        {
-          name: "Sự cố & Ngoại lệ",
-          href: "/dashboard/exceptions",
-          icon: AlertCircle,
-        },
-        {
-          name: "Đối soát COD",
-          href: "/dashboard/finance/wallets",
-          icon: Wallet,
+          name: "Trạm xử lý & Nhập kho",
+          href: "/dashboard/station",
+          icon: ScanLine,
         },
         {
           name: "Vị trí Kệ hàng",
@@ -146,6 +144,16 @@ export default function DashboardLayout({
           icon: MapPin,
         },
         { name: "Kiểm kê Kho", href: "/dashboard/audits", icon: ClipboardList },
+        {
+          name: "Quản lý Sự cố & Ngoại lệ",
+          href: "/dashboard/incidents",
+          icon: AlertTriangle,
+        },
+        {
+          name: "Quản lý Ví & Nợ COD",
+          href: "/dashboard/finance/wallets",
+          icon: Wallet,
+        },
       ];
     }
 
@@ -157,6 +165,11 @@ export default function DashboardLayout({
           name: "Đơn hàng của tôi",
           href: "/dashboard/orders",
           icon: Package,
+        },
+        {
+          name: "Sự cố của tôi",
+          href: "/dashboard/my-incidents",
+          icon: AlertTriangle,
         },
         {
           name: "Ví của tôi",
@@ -324,13 +337,13 @@ export default function DashboardLayout({
 
   return (
     <div className="min-h-screen bg-slate-50 flex">
-      {/* 1. Sidebar (Menu bên trái) */}
+      {/* 1. Sidebar (Menu cố định bên trái) */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-slate-300 transition-transform duration-300 ease-in-out md:relative md:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-slate-300 transition-transform duration-300 ease-in-out flex flex-col ${
           isSidebarOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
+        } md:translate-x-0`}
       >
-        <div className="h-16 flex items-center justify-between px-6 border-b border-slate-800 bg-slate-950">
+        <div className="h-16 flex items-center justify-between px-6 border-b border-slate-800 bg-slate-950 shrink-0">
           <div className="flex items-center gap-2 text-white font-bold text-lg">
             <Truck className="w-6 h-6 text-blue-500" />
             <span>WMS Pro</span>
@@ -344,7 +357,7 @@ export default function DashboardLayout({
           </button>
         </div>
 
-        <nav className="p-4 space-y-1">
+        <nav className="flex-1 overflow-y-auto p-4 space-y-1 custom-scrollbar">
           {activeLinks.map((link) => {
             const Icon = link.icon;
             const isActive = pathname === link.href;
@@ -369,7 +382,7 @@ export default function DashboardLayout({
         </nav>
 
         {/* Nút đăng xuất ở đáy Sidebar */}
-        <div className="absolute bottom-0 w-full p-4 border-t border-slate-800">
+        <div className="p-4 border-t border-slate-800 shrink-0 bg-slate-950/50">
           <button
             onClick={handleLogout}
             className="w-full flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-red-500/10 hover:text-red-500 transition-colors cursor-pointer text-left"
@@ -381,9 +394,9 @@ export default function DashboardLayout({
       </aside>
 
       {/* 2. Main Content (Nội dung chính bên phải) */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Header trên cùng */}
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 sm:px-6 z-[100] shadow-sm relative">
+      <div className="flex-1 flex flex-col min-w-0 md:pl-64 min-h-screen">
+        {/* Header cố định trên cùng */}
+        <header className="h-16 bg-white/95 backdrop-blur-md border-b border-slate-200 flex items-center justify-between px-4 sm:px-6 z-40 shadow-xs sticky top-0">
           <div className="flex items-center gap-4">
             {/* Nút mở sidebar trên Mobile */}
             <button
@@ -531,9 +544,7 @@ export default function DashboardLayout({
         )}
 
         {/* Khu vực render nội dung các trang con (Orders, Hubs,...) */}
-        <main className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8">
-          {children}
-        </main>
+        <main className="flex-1 p-4 sm:p-6 lg:p-8">{children}</main>
       </div>
 
       {/* Overlay mờ khi mở Sidebar trên Mobile */}

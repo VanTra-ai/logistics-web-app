@@ -46,6 +46,7 @@ export default function UsersManagementPage() {
   const [hubs, setHubs] = useState<Hub[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("ALL");
+  const [hubFilter, setHubFilter] = useState<string>("ALL");
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -82,7 +83,9 @@ export default function UsersManagementPage() {
       const response = await api.get("/hubs");
       const data = response.data?.data || response.data || [];
       if (Array.isArray(data)) {
-        setHubs(data);
+        setHubs(
+          data.filter((h: { is_active?: boolean }) => h.is_active !== false),
+        );
       }
     } catch (e) {
       console.warn("Không load được danh sách bưu cục cho dropdown.", e);
@@ -105,6 +108,7 @@ export default function UsersManagementPage() {
         page: page.toString(),
         limit: itemsPerPage.toString(),
         role: roleFilter,
+        hubId: hubFilter,
         search: searchTerm,
       });
 
@@ -152,7 +156,7 @@ export default function UsersManagementPage() {
     }, 500);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roleFilter, searchTerm]);
+  }, [roleFilter, hubFilter, searchTerm]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -441,7 +445,7 @@ export default function UsersManagementPage() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-slate-800">
-              Quản lý nhân viên
+              Quản lý Nhân sự
             </h1>
             <p className="text-xs text-slate-500 mt-1">
               Phân quyền, gán bưu cục trực thuộc và quản lý trạng thái tài khoản
@@ -497,6 +501,19 @@ export default function UsersManagementPage() {
             <option value="ADMIN">Quản trị viên (Admin)</option>
             <option value="SHIPPER">Shipper giao hàng</option>
             <option value="HUB_COORDINATOR">Điều phối viên bưu cục</option>
+          </select>
+          {/* Hub selector dropdown */}
+          <select
+            className="px-3 py-2.5 bg-white border border-slate-250 text-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm font-medium"
+            value={hubFilter}
+            onChange={(e) => setHubFilter(e.target.value)}
+          >
+            <option value="ALL">Tất cả bưu cục</option>
+            {hubs.map((h) => (
+              <option key={h.id} value={h.id}>
+                {h.name}
+              </option>
+            ))}
           </select>
         </div>
 

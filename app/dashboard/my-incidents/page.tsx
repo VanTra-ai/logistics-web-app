@@ -10,9 +10,9 @@ import {
   AlertCircle,
   Calendar,
   Package,
-  User,
   Image as ImageIcon,
-  Building2,
+  Clock,
+  RefreshCw,
 } from "lucide-react";
 
 import api from "@/lib/axios";
@@ -25,11 +25,6 @@ type IncidentStatus =
   | "RESOLVED_RETURN"
   | "RESOLVED_COMPENSATION"
   | "REJECTED";
-
-interface Hub {
-  id: string;
-  name: string;
-}
 
 interface Incident {
   id: string;
@@ -47,37 +42,19 @@ interface Incident {
   resolution_notes?: string;
 }
 
-export default function IncidentsPage() {
+export default function MyIncidentsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(
     null,
   );
-  const [resolutionNotes, setResolutionNotes] = useState("");
-
   const [incidents, setIncidents] = useState<Incident[]>([]);
-  const [hubs, setHubs] = useState<Hub[]>([]);
-  const [hubFilter, setHubFilter] = useState<string>("ALL");
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
   const itemsPerPage = 10;
   const [isLoading, setIsLoading] = useState(false);
 
-  useEffect(() => {
-    api
-      .get("/hubs")
-      .then((res) => {
-        const list = res.data?.data || res.data || [];
-        setHubs(
-          Array.isArray(list)
-            ? list.filter((h: { is_active?: boolean }) => h.is_active !== false)
-            : [],
-        );
-      })
-      .catch(() => {});
-  }, []);
-
-  const fetchIncidents = useCallback(async () => {
+  const fetchMyIncidents = useCallback(async () => {
     setIsLoading(true);
     try {
       const queryParams = new URLSearchParams({
@@ -85,14 +62,11 @@ export default function IncidentsPage() {
         page: currentPage.toString(),
         limit: itemsPerPage.toString(),
       });
-      if (hubFilter && hubFilter !== "ALL") {
-        queryParams.append("hubId", hubFilter);
-      }
       if (searchTerm.trim()) {
         queryParams.append("search", searchTerm.trim());
       }
 
-      const res = await api.get(`/incidents?${queryParams.toString()}`);
+      const res = await api.get(`/incidents/my?${queryParams.toString()}`);
       if (res.data?.meta) {
         setIncidents(res.data.data);
         setTotalPages(res.data.meta.totalPages);
@@ -103,92 +77,92 @@ export default function IncidentsPage() {
         setTotalPages(1);
         setTotalItems(Array.isArray(data) ? data.length : 1);
       }
-    } catch (err) {
-      console.error("Failed to fetch incidents", err);
+    } catch {
+      // Fallback: try general incidents endpoint filtered by shipper
+      try {
+        const queryParams = new URLSearchParams({
+          type: "DELIVERY",
+          page: currentPage.toString(),
+          limit: itemsPerPage.toString(),
+        });
+        if (searchTerm.trim()) {
+          queryParams.append("search", searchTerm.trim());
+        }
+        const res = await api.get(`/incidents?${queryParams.toString()}`);
+        if (res.data?.meta) {
+          setIncidents(res.data.data);
+          setTotalPages(res.data.meta.totalPages);
+          setTotalItems(res.data.meta.totalItems);
+        } else {
+          const data = res.data?.data || res.data || [];
+          setIncidents(Array.isArray(data) ? data : []);
+          setTotalPages(1);
+          setTotalItems(Array.isArray(data) ? data.length : 0);
+        }
+      } catch (err2) {
+        console.error("Failed to fetch incidents", err2);
+      }
     } finally {
       setIsLoading(false);
     }
-  }, [currentPage, hubFilter, searchTerm]);
+  }, [currentPage, searchTerm]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      void fetchIncidents();
+      void fetchMyIncidents();
     }, 300);
     return () => clearTimeout(timer);
-  }, [fetchIncidents]);
-
-  const openIncidentModal = (inc: Incident) => {
-    setSelectedIncident(inc);
-    setResolutionNotes(inc.resolution_notes || "");
-  };
-
-  const handleAction = async (actionType: string) => {
-    if (!selectedIncident) return;
-    setIsLoading(true);
-    try {
-      await api.patch(`/incidents/${selectedIncident.id}/resolve`, {
-        action: actionType,
-        resolution_notes: resolutionNotes,
-      });
-      // Refresh list
-      setIncidents((prev) =>
-        prev.map((inc) =>
-          inc.id === selectedIncident.id
-            ? {
-                ...inc,
-                status:
-                  actionType === "REJECT"
-                    ? "REJECTED"
-                    : (`RESOLVED_${actionType}` as IncidentStatus),
-                resolution_notes: resolutionNotes,
-              }
-            : inc,
-        ),
-      );
-      setSelectedIncident(null);
-      setResolutionNotes("");
-    } catch (err) {
-      console.error("Lỗi khi xử lý sự cố", err);
-      alert("Có lỗi xảy ra khi xử lý sự cố. Vui lòng thử lại.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  }, [fetchMyIncidents]);
 
   const getStatusBadge = (status: IncidentStatus) => {
     switch (status) {
       case "PENDING":
         return {
-          label: "Chờ xử lý",
+          label: "Chờ xét duyệt",
           class: "bg-amber-50 text-amber-700 border-amber-200",
+          icon: Clock,
         };
       case "RESOLVED_REDELIVERY":
         return {
           label: "Đã duyệt: Giao lại",
           class: "bg-blue-50 text-blue-700 border-blue-200",
+          icon: CheckCircle,
         };
       case "RESOLVED_RETURN":
         return {
           label: "Đã duyệt: Hoàn hàng",
           class: "bg-orange-50 text-orange-700 border-orange-200",
+          icon: CheckCircle,
         };
       case "RESOLVED_COMPENSATION":
         return {
-          label: "Đã duyệt: Đền bù / Hàng hỏng",
+          label: "Đã duyệt: Đền bù",
           class: "bg-purple-50 text-purple-700 border-purple-200",
+          icon: CheckCircle,
         };
       case "REJECTED":
         return {
-          label: "Đã từ chối",
+          label: "Bị từ chối",
           class: "bg-red-50 text-red-700 border-red-200",
+          icon: XCircle,
         };
       default:
         return {
           label: "Đã giải quyết",
           class: "bg-emerald-50 text-emerald-700 border-emerald-200",
+          icon: CheckCircle,
         };
     }
   };
+
+  // Stats
+  const pendingCount = incidents.filter((i) => i.status === "PENDING").length;
+  const resolvedCount = incidents.filter(
+    (i) =>
+      i.status !== "PENDING" &&
+      i.status !== "REJECTED",
+  ).length;
+  const rejectedCount = incidents.filter((i) => i.status === "REJECTED").length;
 
   return (
     <div className="space-y-6">
@@ -197,21 +171,78 @@ export default function IncidentsPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
             <AlertTriangle className="w-6 h-6 text-red-500" />
-            Quản lý Sự cố & Ngoại lệ
+            Sự cố đơn hàng của tôi
           </h1>
           <p className="text-slate-500 text-sm mt-1">
-            Theo dõi và xử lý các sự cố phát sinh trong quá trình giao nhận
+            Theo dõi trạng thái xét duyệt các sự cố bạn đã báo cáo
           </p>
+        </div>
+        <button
+          onClick={() => void fetchMyIncidents()}
+          disabled={isLoading}
+          className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-50 transition-colors shadow-sm cursor-pointer disabled:opacity-50"
+        >
+          <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
+          Làm mới
+        </button>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-sm hover:shadow-md transition-all">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-amber-50 text-amber-600 rounded-xl">
+              <Clock className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-slate-500">
+                Chờ xét duyệt
+              </p>
+              <p className="text-2xl font-bold text-amber-600 mt-0.5">
+                {pendingCount}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-sm hover:shadow-md transition-all">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl">
+              <CheckCircle className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-slate-500">
+                Đã được duyệt
+              </p>
+              <p className="text-2xl font-bold text-emerald-600 mt-0.5">
+                {resolvedCount}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-sm hover:shadow-md transition-all">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-red-50 text-red-600 rounded-xl">
+              <XCircle className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-slate-500">Bị từ chối</p>
+              <p className="text-2xl font-bold text-red-600 mt-0.5">
+                {rejectedCount}
+              </p>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Filters and Search */}
-      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col sm:flex-row gap-4 justify-between items-stretch sm:items-center">
-        <div className="relative flex-1 max-w-md">
+      {/* Search */}
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+        <div className="relative max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
           <input
             type="text"
-            placeholder="Tìm theo mã vận đơn, tên shipper, lý do..."
+            placeholder="Tìm theo mã vận đơn, lý do sự cố..."
             className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm"
             value={searchTerm}
             onChange={(e) => {
@@ -220,23 +251,19 @@ export default function IncidentsPage() {
             }}
           />
         </div>
-        <div className="flex items-center gap-3">
-          <Building2 className="w-4 h-4 text-slate-400 hidden sm:block" />
-          <select
-            className="px-3 py-2 border border-slate-200 rounded-lg text-slate-700 bg-white font-medium text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
-            value={hubFilter}
-            onChange={(e) => {
-              setHubFilter(e.target.value);
-              setCurrentPage(1);
-            }}
-          >
-            <option value="ALL">Tất cả bưu cục</option>
-            {hubs.map((h) => (
-              <option key={h.id} value={h.id}>
-                🏢 {h.name}
-              </option>
-            ))}
-          </select>
+      </div>
+
+      {/* Information Banner */}
+      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-start gap-3">
+        <AlertCircle className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
+        <div className="text-sm text-blue-800">
+          <p className="font-semibold">Lưu ý về quy trình xét duyệt sự cố</p>
+          <p className="mt-1 text-blue-700 text-xs">
+            Sau khi bạn báo cáo sự cố, bưu cục sẽ xem xét và xét duyệt trong
+            vòng 1-3 ngày làm việc. Bạn sẽ nhận được thông báo khi sự cố được
+            xử lý. Các phương án giải quyết gồm: Giao lại, Hoàn hàng, hoặc Đền
+            bù.
+          </p>
         </div>
       </div>
 
@@ -246,54 +273,44 @@ export default function IncidentsPage() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-sm text-slate-600 font-medium">
-                <th className="py-4 px-6">Thời gian</th>
+                <th className="py-4 px-6">Thời gian báo cáo</th>
                 <th className="py-4 px-6">Mã đơn hàng</th>
-                <th className="py-4 px-6">Bưu cục</th>
-                <th className="py-4 px-6">Shipper báo lỗi</th>
-                <th className="py-4 px-6">Lý do</th>
+                <th className="py-4 px-6">Lý do sự cố</th>
                 <th className="py-4 px-6">Hình ảnh</th>
-                <th className="py-4 px-6">Trạng thái</th>
-                <th className="py-4 px-6 text-right">Thao tác</th>
+                <th className="py-4 px-6">Trạng thái xét duyệt</th>
+                <th className="py-4 px-6 text-right">Chi tiết</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm">
               {isLoading ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-slate-500">
+                  <td colSpan={6} className="py-8 text-center text-slate-500">
+                    <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-slate-400" />
                     Đang tải dữ liệu...
                   </td>
                 </tr>
               ) : incidents.length > 0 ? (
                 incidents.map((incident) => {
                   const badge = getStatusBadge(incident.status);
+                  const BadgeIcon = badge.icon;
                   return (
                     <tr
                       key={incident.id}
-                      className="hover:bg-slate-50 transition-colors group cursor-pointer"
-                      onClick={() => openIncidentModal(incident)}
+                      className="hover:bg-slate-50 transition-colors cursor-pointer"
+                      onClick={() => setSelectedIncident(incident)}
                     >
                       <td className="py-4 px-6">
                         <div className="flex items-center gap-2 text-slate-600">
                           <Calendar className="w-4 h-4 text-slate-400" />
-                          {new Date(incident.created_at).toLocaleString("vi-VN")}
+                          {new Date(incident.created_at).toLocaleString(
+                            "vi-VN",
+                          )}
                         </div>
                       </td>
                       <td className="py-4 px-6">
                         <div className="flex items-center gap-2 font-medium text-slate-900">
                           <Package className="w-4 h-4 text-blue-500" />
                           {incident.order?.tracking_number || "N/A"}
-                        </div>
-                      </td>
-                      <td className="py-4 px-6">
-                        <div className="flex items-center gap-2 text-slate-700 font-medium">
-                          <Building2 className="w-4 h-4 text-slate-400" />
-                          {incident.order?.pickup_hub?.name || "N/A"}
-                        </div>
-                      </td>
-                      <td className="py-4 px-6">
-                        <div className="flex items-center gap-2 text-slate-800 font-semibold">
-                          <User className="w-4 h-4 text-blue-600" />
-                          {incident.shipper?.full_name || "Chưa xác định"}
                         </div>
                       </td>
                       <td className="py-4 px-6">
@@ -325,7 +342,7 @@ export default function IncidentsPage() {
                         <span
                           className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${badge.class}`}
                         >
-                          <AlertCircle className="w-3.5 h-3.5" />
+                          <BadgeIcon className="w-3.5 h-3.5" />
                           {badge.label}
                         </span>
                       </td>
@@ -334,7 +351,7 @@ export default function IncidentsPage() {
                           className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                           onClick={(e) => {
                             e.stopPropagation();
-                            openIncidentModal(incident);
+                            setSelectedIncident(incident);
                           }}
                         >
                           <Eye className="w-4 h-4" />
@@ -346,8 +363,15 @@ export default function IncidentsPage() {
               ) : null}
               {!isLoading && incidents.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-slate-500">
-                    Không tìm thấy sự cố nào.
+                  <td colSpan={6} className="py-12 text-center">
+                    <AlertTriangle className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+                    <p className="text-slate-500 font-medium text-sm">
+                      Bạn chưa có sự cố nào được ghi nhận.
+                    </p>
+                    <p className="text-slate-400 text-xs mt-1">
+                      Báo cáo sự cố thông qua ứng dụng di động khi gặp vấn đề
+                      trong quá trình giao hàng.
+                    </p>
                   </td>
                 </tr>
               )}
@@ -367,7 +391,7 @@ export default function IncidentsPage() {
         )}
       </div>
 
-      {/* Modal / Drawer for Details */}
+      {/* Detail Modal (Read-only for shippers) */}
       {selectedIncident && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
           <div
@@ -379,53 +403,58 @@ export default function IncidentsPage() {
               <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
                 Chi tiết sự cố{" "}
                 <span className="text-slate-400 font-normal text-sm">
-                  #{selectedIncident.id}
+                  #{selectedIncident.id.slice(0, 8)}
                 </span>
               </h3>
               <button
-                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors"
-                onClick={() => {
-                  setSelectedIncident(null);
-                  setResolutionNotes("");
-                }}
+                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors cursor-pointer"
+                onClick={() => setSelectedIncident(null)}
               >
                 <XCircle className="w-5 h-5" />
               </button>
             </div>
 
             {/* Modal Body */}
-            <div className="p-6 overflow-y-auto flex-1 space-y-4">
-              {/* Alert Status if Resolved */}
-              {selectedIncident.status !== "PENDING" && (
-                <div className="p-3.5 rounded-xl bg-slate-100 border border-slate-200 text-slate-800 text-xs font-semibold flex items-center justify-between">
-                  <span className="flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 text-emerald-600" />
-                    Sự cố này đã được xử lý kết thúc! (Phương án:{" "}
-                    <strong className="text-blue-700">
-                      {getStatusBadge(selectedIncident.status).label}
-                    </strong>
-                    )
-                  </span>
+            <div className="p-6 overflow-y-auto flex-1 space-y-5">
+              {/* Status Banner */}
+              <div
+                className={`p-3.5 rounded-xl border flex items-center gap-3 ${
+                  selectedIncident.status === "PENDING"
+                    ? "bg-amber-50 border-amber-200 text-amber-800"
+                    : selectedIncident.status === "REJECTED"
+                      ? "bg-red-50 border-red-200 text-red-800"
+                      : "bg-emerald-50 border-emerald-200 text-emerald-800"
+                }`}
+              >
+                {selectedIncident.status === "PENDING" ? (
+                  <Clock className="w-5 h-5 shrink-0" />
+                ) : selectedIncident.status === "REJECTED" ? (
+                  <XCircle className="w-5 h-5 shrink-0" />
+                ) : (
+                  <CheckCircle className="w-5 h-5 shrink-0" />
+                )}
+                <div>
+                  <p className="font-semibold text-sm">
+                    {getStatusBadge(selectedIncident.status).label}
+                  </p>
                   {selectedIncident.resolvedBy?.full_name && (
-                    <span className="text-slate-500 font-normal">
-                      Duyệt bởi: {selectedIncident.resolvedBy.full_name}
-                    </span>
+                    <p className="text-xs opacity-70 mt-0.5">
+                      Xử lý bởi: {selectedIncident.resolvedBy.full_name}
+                    </p>
                   )}
                 </div>
-              )}
+              </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Details */}
                 <div className="space-y-4">
                   <div>
                     <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                      Thông tin chung
+                      Thông tin sự cố
                     </label>
                     <div className="mt-2 space-y-3">
                       <div className="flex justify-between items-center py-2 border-b border-slate-100">
-                        <span className="text-slate-500 text-sm">
-                          Mã đơn hàng
-                        </span>
+                        <span className="text-slate-500 text-sm">Mã đơn</span>
                         <span className="font-semibold text-slate-800">
                           {selectedIncident.order?.tracking_number}
                         </span>
@@ -437,19 +466,10 @@ export default function IncidentsPage() {
                         </span>
                       </div>
                       <div className="flex justify-between items-center py-2 border-b border-slate-100">
-                        <span className="text-slate-500 text-sm">Shipper báo lỗi</span>
-                        <span className="font-semibold text-blue-700">
-                          {selectedIncident.shipper?.full_name || "Chưa xác định"}
-                          {selectedIncident.shipper?.phone_number
-                            ? ` (${selectedIncident.shipper.phone_number})`
-                            : ""}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center py-2 border-b border-slate-100">
                         <span className="text-slate-500 text-sm">
                           Thời gian báo cáo
                         </span>
-                        <span className="text-slate-800">
+                        <span className="text-slate-800 text-xs">
                           {new Date(selectedIncident.created_at).toLocaleString(
                             "vi-VN",
                           )}
@@ -466,6 +486,17 @@ export default function IncidentsPage() {
                       {selectedIncident.reason}
                     </div>
                   </div>
+
+                  {selectedIncident.description && (
+                    <div>
+                      <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                        Mô tả chi tiết
+                      </label>
+                      <div className="mt-2 p-3 bg-slate-50 text-slate-700 rounded-lg text-sm border border-slate-100">
+                        {selectedIncident.description}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Evidence Image */}
@@ -495,68 +526,27 @@ export default function IncidentsPage() {
                 </div>
               </div>
 
-              {/* Resolution Notes Input */}
-              <div className="mt-6">
-                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 block">
-                  Ghi chú xử lý
-                </label>
-                <textarea
-                  readOnly={selectedIncident.status !== "PENDING"}
-                  placeholder={
-                    selectedIncident.status === "PENDING"
-                      ? "Nhập ghi chú hoặc hướng giải quyết (bắt buộc đối với hoàn/đền bù)..."
-                      : "Chưa có ghi chú xử lý"
-                  }
-                  className={`w-full border border-slate-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all min-h-[100px] resize-y ${
-                    selectedIncident.status !== "PENDING"
-                      ? "bg-slate-50 text-slate-600 cursor-not-allowed"
-                      : ""
-                  }`}
-                  value={resolutionNotes}
-                  onChange={(e) => setResolutionNotes(e.target.value)}
-                ></textarea>
-              </div>
+              {/* Resolution Notes (read-only) */}
+              {selectedIncident.resolution_notes && (
+                <div>
+                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 block">
+                    Ghi chú xử lý từ bưu cục
+                  </label>
+                  <div className="p-3.5 bg-blue-50 border border-blue-100 rounded-xl text-sm text-blue-800">
+                    {selectedIncident.resolution_notes}
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* Modal Footer (Actions) */}
-            <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex flex-col sm:flex-row items-center gap-3 justify-end">
-              {selectedIncident.status === "PENDING" ? (
-                <>
-                  <button
-                    className="w-full sm:w-auto px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium text-sm transition-colors shadow-sm shadow-blue-600/20 flex items-center justify-center gap-2 cursor-pointer"
-                    onClick={() => handleAction("REDELIVERY")}
-                  >
-                    <CheckCircle className="w-4 h-4" />
-                    Phê duyệt giao lại
-                  </button>
-
-                  <button
-                    className="w-full sm:w-auto px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-medium text-sm transition-colors shadow-sm shadow-orange-500/20 flex items-center justify-center gap-2 cursor-pointer"
-                    onClick={() => handleAction("RETURN")}
-                  >
-                    <AlertTriangle className="w-4 h-4" />
-                    Xác nhận hoàn hàng
-                  </button>
-
-                  <button
-                    className="w-full sm:w-auto px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium text-sm transition-colors shadow-sm shadow-red-600/20 flex items-center justify-center gap-2 cursor-pointer"
-                    onClick={() => handleAction("COMPENSATION")}
-                  >
-                    <XCircle className="w-4 h-4" />
-                    Xác nhận đền bù / Hàng hỏng
-                  </button>
-                </>
-              ) : (
-                <button
-                  className="w-full sm:w-auto px-5 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl font-bold text-sm transition-colors cursor-pointer"
-                  onClick={() => {
-                    setSelectedIncident(null);
-                    setResolutionNotes("");
-                  }}
-                >
-                  Đóng (Đã xử lý)
-                </button>
-              )}
+            {/* Modal Footer */}
+            <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex justify-end">
+              <button
+                className="px-5 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl font-bold text-sm transition-colors cursor-pointer"
+                onClick={() => setSelectedIncident(null)}
+              >
+                Đóng
+              </button>
             </div>
           </div>
         </div>

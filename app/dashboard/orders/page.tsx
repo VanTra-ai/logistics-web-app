@@ -26,6 +26,8 @@ import api from "@/lib/axios";
 import axios from "axios";
 import BulkUploadModal from "@/components/BulkUploadModal";
 import Pagination from "@/components/Pagination";
+import ShipperOrdersDashboard from "./ShipperOrdersDashboard";
+import AddressInput from "@/app/components/AddressInput";
 
 interface Hub {
   id: string;
@@ -46,9 +48,16 @@ interface Order {
   sender_name: string;
   sender_phone: string;
   sender_address: string;
+  sender_province_code?: string;
+  sender_ward_code?: string;
+  sender_street?: string;
+
   receiver_name: string;
   receiver_phone: string;
   receiver_address: string;
+  receiver_province_code?: string;
+  receiver_ward_code?: string;
+  receiver_street?: string;
   weight: number;
   length?: number;
   width?: number;
@@ -88,7 +97,9 @@ interface Shipment {
   id: string;
   shipment_code?: string | null;
   vehicle_number: string;
+  vehicle_type?: string;
   status: string;
+  type: string; // PICKUP | DELIVERY | RETURN
   created_at: string;
   shipper: Shipper;
   origin_hub: Hub;
@@ -157,6 +168,26 @@ export default function OrdersManagementPage() {
   const [selectedShipperId, setSelectedShipperId] = useState("");
 
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [trackingHistory, setTrackingHistory] = useState<
+    {
+      status: string;
+      created_at: string;
+      operator?: { full_name: string; role: string };
+      note?: string;
+      lat?: number;
+      long?: number;
+      image_url?: string;
+    }[]
+  >([]);
+
+  useEffect(() => {
+    if (isDetailModalOpen && selectedOrder?.id) {
+      api
+        .get(`/trackings/${selectedOrder.id}`)
+        .then((res) => setTrackingHistory(res.data.data || []))
+        .catch((err) => console.error("Lỗi tải lịch sử giao hàng:", err));
+    }
+  }, [isDetailModalOpen, selectedOrder]);
 
   // Putaway (Xếp kệ) modal states
   const [isPutawayModalOpen, setIsPutawayModalOpen] = useState(false);
@@ -210,9 +241,16 @@ export default function OrdersManagementPage() {
     sender_name: "",
     sender_phone: "",
     sender_address: "",
+    sender_province_code: "",
+    sender_ward_code: "",
+    sender_street: "",
+
     receiver_name: "",
     receiver_phone: "",
     receiver_address: "",
+    receiver_province_code: "",
+    receiver_ward_code: "",
+    receiver_street: "",
     weight: 1,
     length: 0,
     width: 0,
@@ -318,13 +356,17 @@ export default function OrdersManagementPage() {
 
     // Get current user from localStorage
     let currentHubId = "";
+    let parsedUser: {
+      role: string;
+      hub?: { id: string; name: string } | null;
+    } | null = null;
     if (typeof window !== "undefined") {
       const savedUser = localStorage.getItem("user");
       if (savedUser) {
         try {
-          const parsed = JSON.parse(savedUser);
-          setCurrentUser(parsed);
-          currentHubId = parsed.hub?.id || "";
+          parsedUser = JSON.parse(savedUser);
+          setCurrentUser(parsedUser);
+          currentHubId = parsedUser?.hub?.id || "";
         } catch {
           // Do nothing
         }
@@ -335,16 +377,24 @@ export default function OrdersManagementPage() {
       // 1. Fetch Hubs
       const hubsRes = await api.get("/hubs");
       const hubsList = hubsRes.data?.data || hubsRes.data || [];
-      if (Array.isArray(hubsList)) setHubs(hubsList);
+      if (Array.isArray(hubsList)) {
+        setHubs(hubsList.filter((h: { is_active?: boolean }) => h.is_active !== false));
+      }
 
-      // 2. Fetch Users to filter shippers
-      const usersRes = await api.get("/users");
-      const usersList = usersRes.data?.data || usersRes.data || [];
-      if (Array.isArray(usersList)) {
-        const shipperUsers = usersList.filter(
-          (u: { role: string }) => u.role === "SHIPPER",
-        );
-        setShippers(shipperUsers);
+      // 2. Fetch Users to filter shippers (Only if not SHIPPER)
+      if (parsedUser?.role !== "SHIPPER") {
+        try {
+          const usersRes = await api.get("/users");
+          const usersList = usersRes.data?.data || usersRes.data || [];
+          if (Array.isArray(usersList)) {
+            const shipperUsers = usersList.filter(
+              (u: { role: string }) => u.role === "SHIPPER",
+            );
+            setShippers(shipperUsers);
+          }
+        } catch {
+          console.warn("Failed to fetch users");
+        }
       }
 
       // 3. Fetch Orders
@@ -368,25 +418,27 @@ export default function OrdersManagementPage() {
         setTotalItems(meta.totalItems);
       }
 
-      // 4. Fetch Shipments
-      // Fetch shipments of current hub if coordinator, otherwise fetch first hub / all
-      const targetHubId = currentHubId || hubsList[0]?.id || "hub-1";
-      try {
-        const shipmentsRes = await api.get(`/hubs/${targetHubId}/shipments`);
-        const shipmentsList =
-          shipmentsRes.data?.data || shipmentsRes.data || [];
-        if (Array.isArray(shipmentsList)) setShipments(shipmentsList);
-      } catch {
-        // Fallback to general get if specific hub-shipments endpoint fails
-        setShipments([]);
-      }
-      // 5. Fetch Tariff
-      try {
-        const tariffRes = await api.get("/finance/tariff");
-        const tariffData = tariffRes.data?.data || tariffRes.data;
-        if (tariffData) setTariff(tariffData);
-      } catch {
-        console.warn("Could not load tariff for estimate.");
+      // 4. Fetch Shipments (only for ADMIN/HUB_COORDINATOR)
+      if (parsedUser?.role !== "SHIPPER") {
+        const targetHubId = currentHubId || hubsList[0]?.id || "hub-1";
+        try {
+          const shipmentsRes = await api.get(`/hubs/${targetHubId}/shipments`);
+          const shipmentsList =
+            shipmentsRes.data?.data || shipmentsRes.data || [];
+          if (Array.isArray(shipmentsList)) setShipments(shipmentsList);
+        } catch {
+          // Fallback to general get if specific hub-shipments endpoint fails
+          setShipments([]);
+        }
+
+        // 5. Fetch Tariff
+        try {
+          const tariffRes = await api.get("/finance/tariff");
+          const tariffData = tariffRes.data?.data || tariffRes.data;
+          if (tariffData) setTariff(tariffData);
+        } catch {
+          console.warn("Could not load tariff for estimate.");
+        }
       }
     } catch (err) {
       console.warn("Lỗi kết nối API backend.", err);
@@ -429,6 +481,10 @@ export default function OrdersManagementPage() {
     }
   }, [notification]);
 
+  if (currentUser?.role === "SHIPPER") {
+    return <ShipperOrdersDashboard />;
+  }
+
   // Handle Order submit (Create/Update)
   const handleOrderSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -444,10 +500,20 @@ export default function OrdersManagementPage() {
       return;
     }
 
-    if (Number(orderForm.weight) <= 0 || Number(orderForm.weight) > 5000) {
+    const formLength = Number(orderForm.length) || 0;
+    const formWidth = Number(orderForm.width) || 0;
+    const formHeight = Number(orderForm.height) || 0;
+    const formDivisor = Number(tariff?.volumetric_divisor) || 5000;
+    const formBulkWeight =
+      formDivisor > 0 ? (formLength * formWidth * formHeight) / formDivisor : 0;
+    const formRawWeight = Number(orderForm.weight) || 0;
+    const formChargeableWeight = Math.max(formRawWeight, formBulkWeight);
+
+    if (formChargeableWeight <= 0 || formChargeableWeight > 5000) {
       setNotification({
         type: "error",
-        message: "Cân nặng phải lớn hơn 0 và nhỏ hơn 5000 kg!",
+        message:
+          "Vui lòng nhập Cân nặng thực tế hoặc Kích thước (Dài x Rộng x Cao) hợp lệ!",
       });
       return;
     }
@@ -480,23 +546,31 @@ export default function OrdersManagementPage() {
 
     setIsSubmitLoading(true);
 
+    const payload = {
+      sender_name: orderForm.sender_name,
+      sender_phone: orderForm.sender_phone,
+      sender_address: orderForm.sender_address,
+      sender_province_code: orderForm.sender_province_code,
+      sender_ward_code: orderForm.sender_ward_code,
+      sender_street: orderForm.sender_street,
+      receiver_name: orderForm.receiver_name,
+      receiver_phone: orderForm.receiver_phone,
+      receiver_address: orderForm.receiver_address,
+      receiver_province_code: orderForm.receiver_province_code,
+      receiver_ward_code: orderForm.receiver_ward_code,
+      receiver_street: orderForm.receiver_street,
+      weight: Number(orderForm.weight),
+      length: Number(orderForm.length),
+      width: Number(orderForm.width),
+      height: Number(orderForm.height),
+      cod_amount: Number(orderForm.cod_amount),
+      note: orderForm.note,
+      pickup_hub_id: orderForm.pickup_hub_id,
+    };
+
     try {
       if (isOrderEditMode && selectedOrder) {
-        await api.patch(`/orders/${selectedOrder.id}`, {
-          sender_name: orderForm.sender_name,
-          sender_phone: orderForm.sender_phone,
-          sender_address: orderForm.sender_address,
-          receiver_name: orderForm.receiver_name,
-          receiver_phone: orderForm.receiver_phone,
-          receiver_address: orderForm.receiver_address,
-          weight: Number(orderForm.weight),
-          length: Number(orderForm.length),
-          width: Number(orderForm.width),
-          height: Number(orderForm.height),
-          cod_amount: Number(orderForm.cod_amount),
-          note: orderForm.note,
-          pickup_hub_id: orderForm.pickup_hub_id,
-        });
+        await api.patch(`/orders/${selectedOrder.id}`, payload);
         setNotification({
           type: "success",
           message: "Cập nhật đơn hàng thành công!",
@@ -543,9 +617,15 @@ export default function OrdersManagementPage() {
       sender_name: "",
       sender_phone: "",
       sender_address: "",
+      sender_province_code: "",
+      sender_ward_code: "",
+      sender_street: "",
       receiver_name: "",
       receiver_phone: "",
       receiver_address: "",
+      receiver_province_code: "",
+      receiver_ward_code: "",
+      receiver_street: "",
       weight: 1,
       length: 0,
       width: 0,
@@ -565,9 +645,15 @@ export default function OrdersManagementPage() {
       sender_name: order.sender_name,
       sender_phone: order.sender_phone,
       sender_address: order.sender_address,
+      sender_province_code: order.sender_province_code || "",
+      sender_ward_code: order.sender_ward_code || "",
+      sender_street: order.sender_street || "",
       receiver_name: order.receiver_name,
       receiver_phone: order.receiver_phone,
       receiver_address: order.receiver_address,
+      receiver_province_code: order.receiver_province_code || "",
+      receiver_ward_code: order.receiver_ward_code || "",
+      receiver_street: order.receiver_street || "",
       weight: order.weight,
       length: order.length || 0,
       width: order.width || 0,
@@ -751,12 +837,15 @@ export default function OrdersManagementPage() {
       case "DELIVERING":
       case "IN_TRANSIT":
         return "bg-purple-50 text-purple-700 border-purple-200";
+      case "DELIVERED":
       case "FINISHED":
         return "bg-emerald-50 text-emerald-700 border-emerald-250";
       case "FAILED":
+      case "DAMAGED_DESTROYED":
         return "bg-red-50 text-red-700 border-red-205";
       case "RETURNING":
       case "RETURNED":
+      case "RETURN_TO_SENDER":
         return "bg-orange-50 text-orange-700 border-orange-200";
       default:
         return "bg-slate-50 text-slate-600 border-slate-200";
@@ -787,9 +876,12 @@ export default function OrdersManagementPage() {
       case "CANCELLED":
         return "Đã hủy đơn";
       case "RETURNING":
+      case "RETURN_TO_SENDER":
         return "Chuyển hoàn";
       case "RETURNED":
         return "Đã trả hàng";
+      case "DAMAGED_DESTROYED":
+        return "Hàng hỏng / Đền bù";
       default:
         return status;
     }
@@ -876,7 +968,7 @@ export default function OrdersManagementPage() {
             <input
               type="text"
               className="block w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 text-slate-800 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-xs"
-              placeholder="Tìm mã vận đơn, người gửi, người nhận, số điện thoại..."
+              placeholder="Tìm mã vận đơn, người gửi, địa chỉ (Quận, Phường...)"
               value={orderSearch}
               onChange={(e) => setOrderSearch(e.target.value)}
             />
@@ -1156,8 +1248,7 @@ export default function OrdersManagementPage() {
                                 </>
                               )}
 
-                              {(item.current_status === "DELIVERING" ||
-                                item.current_status === "FAILED") && (
+                              {item.current_status === "FAILED" && (
                                 <>
                                   <button
                                     onClick={() => handleQuickRetry(item.id)}
@@ -1309,23 +1400,24 @@ export default function OrdersManagementPage() {
                       }
                     />
                   </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-500 mb-1">
-                      Địa chỉ
-                    </label>
-                    <textarea
-                      required
-                      rows={2}
-                      className="block w-full px-3 py-2 bg-white border border-slate-250 text-slate-800 text-xs rounded-lg focus:border-blue-500 outline-none resize-none"
-                      value={orderForm.sender_address}
-                      onChange={(e) =>
-                        setOrderForm({
-                          ...orderForm,
-                          sender_address: e.target.value,
-                        })
-                      }
-                    />
-                  </div>
+                  <AddressInput
+                    label="Địa chỉ"
+                    value={{
+                      province_code: orderForm.sender_province_code,
+                      ward_code: orderForm.sender_ward_code,
+                      street: orderForm.sender_street,
+                      full_address: orderForm.sender_address,
+                    }}
+                    onChange={(val) =>
+                      setOrderForm({
+                        ...orderForm,
+                        sender_province_code: val.province_code || "",
+                        sender_ward_code: val.ward_code || "",
+                        sender_street: val.street || "",
+                        sender_address: val.full_address || "",
+                      })
+                    }
+                  />
                 </div>
 
                 {/* Receiver card */}
@@ -1367,23 +1459,24 @@ export default function OrdersManagementPage() {
                       }
                     />
                   </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-500 mb-1">
-                      Địa chỉ
-                    </label>
-                    <textarea
-                      required
-                      rows={2}
-                      className="block w-full px-3 py-2 bg-white border border-slate-250 text-slate-800 text-xs rounded-lg focus:border-blue-500 outline-none resize-none"
-                      value={orderForm.receiver_address}
-                      onChange={(e) =>
-                        setOrderForm({
-                          ...orderForm,
-                          receiver_address: e.target.value,
-                        })
-                      }
-                    />
-                  </div>
+                  <AddressInput
+                    label="Địa chỉ"
+                    value={{
+                      province_code: orderForm.receiver_province_code,
+                      ward_code: orderForm.receiver_ward_code,
+                      street: orderForm.receiver_street,
+                      full_address: orderForm.receiver_address,
+                    }}
+                    onChange={(val) =>
+                      setOrderForm({
+                        ...orderForm,
+                        receiver_province_code: val.province_code || "",
+                        receiver_ward_code: val.ward_code || "",
+                        receiver_street: val.street || "",
+                        receiver_address: val.full_address || "",
+                      })
+                    }
+                  />
                 </div>
               </div>
 
@@ -1391,15 +1484,18 @@ export default function OrdersManagementPage() {
               <div className="grid grid-cols-3 gap-4">
                 <div>
                   <label className="block text-[10px] font-bold text-slate-500 mb-1">
-                    Khối lượng (kg)
+                    Cân nặng thực tế (kg){" "}
+                    <span className="text-slate-400 font-normal">
+                      (Tùy chọn)
+                    </span>
                   </label>
                   <input
                     type="number"
                     step="0.01"
-                    min="0.01"
-                    required
+                    min="0"
+                    placeholder="Tự động tính từ thể tích"
                     className="block w-full px-3 py-2 bg-slate-50 border border-slate-250 text-slate-800 text-xs rounded-lg outline-none focus:border-blue-500"
-                    value={orderForm.weight}
+                    value={orderForm.weight || ""}
                     onChange={(e) =>
                       setOrderForm({
                         ...orderForm,
@@ -1531,22 +1627,20 @@ export default function OrdersManagementPage() {
                 />
               </div>
 
-              {/* Fee Estimate */}
-              <div className="bg-blue-50/50 p-4 border border-blue-100 rounded-xl">
+              {/* Fee Estimate & Volumetric Calculation Detail */}
+              <div className="bg-blue-50/50 p-4 border border-blue-100 rounded-xl space-y-2">
                 {(() => {
                   let fee = 0;
-                  if (tariff) {
-                    const length = Number(orderForm.length) || 0;
-                    const width = Number(orderForm.width) || 0;
-                    const height = Number(orderForm.height) || 0;
-                    const divisor = Number(tariff.volumetric_divisor) || 5000;
-                    const bulkWeight =
-                      divisor > 0 ? (length * width * height) / divisor : 0;
-                    const chargeableWeight = Math.max(
-                      Number(orderForm.weight) || 0,
-                      bulkWeight,
-                    );
+                  const length = Number(orderForm.length) || 0;
+                  const width = Number(orderForm.width) || 0;
+                  const height = Number(orderForm.height) || 0;
+                  const divisor = Number(tariff?.volumetric_divisor) || 5000;
+                  const bulkWeight =
+                    divisor > 0 ? (length * width * height) / divisor : 0;
+                  const rawWeight = Number(orderForm.weight) || 0;
+                  const chargeableWeight = Math.max(rawWeight, bulkWeight);
 
+                  if (tariff) {
                     const distance = 5;
                     const extraDistance = Math.max(
                       0,
@@ -1570,19 +1664,35 @@ export default function OrdersManagementPage() {
                     fee = weightFee + codFee;
                   }
                   return (
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="font-bold text-slate-600">
-                        Phí vận chuyển & thu hộ dự kiến:
-                      </span>
-                      <span className="font-extrabold text-blue-700">
-                        {fee > 0
-                          ? new Intl.NumberFormat("vi-VN", {
-                              style: "currency",
-                              currency: "VND",
-                            }).format(fee)
-                          : "Đang tính toán..."}
-                      </span>
-                    </div>
+                    <>
+                      <div className="flex flex-col sm:flex-row justify-between text-xs gap-1 border-b border-blue-100/60 pb-2">
+                        <div className="text-slate-600 font-medium">
+                          Quy đổi thể tích (D×R×C/{divisor}):{" "}
+                          <span className="font-bold text-blue-800 font-mono">
+                            {bulkWeight.toFixed(2)} kg
+                          </span>
+                        </div>
+                        <div className="text-slate-600 font-medium">
+                          Trọng lượng tính cước:{" "}
+                          <span className="font-extrabold text-blue-900 font-mono bg-blue-100/80 px-1.5 py-0.5 rounded">
+                            {chargeableWeight.toFixed(2)} kg
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex justify-between items-center text-sm pt-1">
+                        <span className="font-bold text-slate-700">
+                          Phí vận chuyển & thu hộ dự kiến:
+                        </span>
+                        <span className="font-extrabold text-blue-700 text-base">
+                          {fee > 0
+                            ? new Intl.NumberFormat("vi-VN", {
+                                style: "currency",
+                                currency: "VND",
+                              }).format(fee)
+                            : "0 ₫"}
+                        </span>
+                      </div>
+                    </>
                   );
                 })()}
               </div>
@@ -1918,6 +2028,90 @@ export default function OrdersManagementPage() {
                   >
                     Xem ảnh chụp chất lượng cao
                   </a>
+                </div>
+              )}
+
+              {/* Lịch sử đơn hàng (Timeline) */}
+              {trackingHistory.length > 0 && (
+                <div className="border-t border-slate-150 pt-3">
+                  <span className="text-[10px] text-slate-450 uppercase font-bold tracking-wider block mb-4">
+                    Nhật ký hành trình
+                  </span>
+                  <div className="relative pl-3 space-y-4 before:absolute before:inset-y-0 before:left-[17px] before:w-0.5 before:bg-slate-200">
+                    {trackingHistory.map((history, idx) => {
+                      const isFirst = idx === 0; // Most recent (since it's sorted DESC)
+                      const isStatusFailed =
+                        history.status === "FAILED" ||
+                        history.status === "RETURN_TO_SENDER" ||
+                        history.status === "CANCELLED";
+                      const isStatusSuccess =
+                        history.status === "FINISHED" ||
+                        history.status === "DELIVERED";
+
+                      let dotColor = "bg-slate-300 border-white";
+                      if (isFirst) {
+                        if (isStatusSuccess)
+                          dotColor = "bg-emerald-500 border-emerald-100";
+                        else if (isStatusFailed)
+                          dotColor = "bg-red-500 border-red-100";
+                        else dotColor = "bg-blue-500 border-blue-100";
+                      } else {
+                        if (isStatusSuccess)
+                          dotColor = "bg-emerald-400 border-white";
+                        else if (isStatusFailed)
+                          dotColor = "bg-red-400 border-white";
+                        else dotColor = "bg-blue-400 border-white";
+                      }
+
+                      return (
+                        <div key={idx} className="relative pl-8">
+                          {/* Timeline Dot */}
+                          <div
+                            className={`absolute left-[-2px] top-1 w-3.5 h-3.5 rounded-full border-2 ${dotColor} shadow-sm z-10`}
+                          ></div>
+
+                          {/* Content */}
+                          <div className="flex flex-col gap-0.5">
+                            <div className="flex justify-between items-start">
+                              <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                                {getStatusLabel(history.status)}
+                              </span>
+                              <span className="text-[10px] font-medium text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                                {new Date(history.created_at).toLocaleString(
+                                  "vi-VN",
+                                )}
+                              </span>
+                            </div>
+
+                            {/* Operator info */}
+                            <span className="text-[10px] font-medium text-slate-500">
+                              Thực hiện bởi:{" "}
+                              {history.operator
+                                ? `${history.operator.full_name} (${history.operator.role})`
+                                : "Hệ thống"}
+                            </span>
+
+                            {history.note && (
+                              <div className="mt-1.5 text-xs text-slate-700 bg-slate-50 p-2 rounded-lg border border-slate-100 leading-relaxed">
+                                {history.note}
+                              </div>
+                            )}
+
+                            {history.image_url && (
+                              <a
+                                href={history.image_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="mt-1 inline-block text-[10px] text-blue-600 hover:underline"
+                              >
+                                📎 Xem ảnh đính kèm
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </div>

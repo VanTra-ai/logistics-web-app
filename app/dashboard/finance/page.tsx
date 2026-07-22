@@ -27,6 +27,8 @@ interface TariffConfig {
   hub_commission_percent: number;
   shipper_payout_flat: number;
   shipper_payout_percent: number;
+  shipper_pickup_payout: number;
+  shipper_return_payout: number;
 }
 
 interface Hub {
@@ -67,6 +69,8 @@ export default function FinanceTariffPage() {
     hub_commission_percent: 15.0,
     shipper_payout_flat: 3500,
     shipper_payout_percent: 10.0,
+    shipper_pickup_payout: 2500,
+    shipper_return_payout: 2500,
   });
 
   useEffect(() => {
@@ -81,7 +85,7 @@ export default function FinanceTariffPage() {
       try {
         const res = await api.get("/hubs");
         const data = res.data?.data || res.data || [];
-        setHubs(Array.isArray(data) ? data : []);
+        setHubs(Array.isArray(data) ? data.filter((h: { is_active?: boolean }) => h.is_active !== false) : []);
       } catch (err) {
         console.warn("Lỗi tải danh sách bưu cục.", err);
       }
@@ -157,6 +161,12 @@ export default function FinanceTariffPage() {
         shipper_payout_percent: Number(
           Number(config.shipper_payout_percent).toFixed(2),
         ),
+        shipper_pickup_payout: Math.round(
+          Number(config.shipper_pickup_payout || 2500),
+        ),
+        shipper_return_payout: Math.round(
+          Number(config.shipper_return_payout || 2500),
+        ),
       });
       setNotification({
         type: "success",
@@ -213,7 +223,7 @@ export default function FinanceTariffPage() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-slate-800">
-              Quản Trị Dòng Tiền & Cấu Hình Biểu Phí
+              Dòng tiền & Biểu phí
             </h1>
             <p className="text-xs text-slate-500 mt-1">
               Định nghĩa bảng giá cước vận chuyển, phụ phí cồng kềnh, phí COD và
@@ -446,16 +456,16 @@ export default function FinanceTariffPage() {
                     </p>
                   </div>
 
-                  <div className="p-3.5 bg-slate-50 border border-slate-150 rounded-xl text-xs space-y-2 mt-2">
-                    <div className="flex justify-between items-center text-[11px] font-bold text-slate-500">
-                      <span>CÔNG THỨC QUY ĐỔI THỂ TÍCH</span>
+                  <div className="p-3.5 bg-blue-50/60 border border-blue-150 rounded-xl text-xs space-y-2 mt-2">
+                    <div className="flex justify-between items-center text-[11px] font-extrabold text-blue-800 uppercase">
+                      <span>Cơ chế Tính cước theo Thể tích Chuẩn</span>
                     </div>
-                    <div className="font-mono text-xs text-indigo-750 bg-indigo-50/50 p-2.5 rounded-lg text-center font-bold">
-                      (Dài x Rộng x Cao) / {config.volumetric_divisor || 5000}
+                    <div className="font-mono text-xs text-blue-900 bg-white p-2.5 rounded-lg border border-blue-150 font-bold space-y-1">
+                      <div>Quy đổi (kg) = (Dài × Rộng × Cao cm) / {config.volumetric_divisor || 5000}</div>
+                      <div className="text-emerald-700 text-[11px]">Trọng lượng cước = MAX(Cân thực tế, Quy đổi)</div>
                     </div>
-                    <p className="text-[10px] text-slate-400 leading-relaxed">
-                      Các đơn hàng cồng kềnh có khối lượng quy đổi lớn hơn cân
-                      nặng thực tế sẽ được tính cước theo khối lượng này.
+                    <p className="text-[10px] text-slate-500 leading-relaxed">
+                      💡 Người gửi/Tạo đơn <strong>không bắt buộc nhập Cân nặng thực tế</strong>. Nếu để trống, hệ thống tự động sử dụng Khối lượng quy đổi thể tích làm trọng lượng tính cước chính thức.
                     </p>
                   </div>
 
@@ -626,17 +636,70 @@ export default function FinanceTariffPage() {
                   </div>
                 </div>
 
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-550 mb-1.5 uppercase">
+                      Thù lao Lấy hàng thành công
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="0"
+                        disabled={isReadOnly}
+                        className="block w-full px-4 py-2.5 bg-slate-50 border border-slate-200 text-slate-800 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 text-xs font-semibold disabled:opacity-70 disabled:cursor-not-allowed"
+                        value={config.shipper_pickup_payout || 2500}
+                        onChange={(e) =>
+                          setConfig({
+                            ...config,
+                            shipper_pickup_payout: Number(e.target.value),
+                          })
+                        }
+                      />
+                      <span className="absolute inset-y-0 right-4 flex items-center text-[10px] text-slate-400 font-bold">
+                        VNĐ / Đơn
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      Cộng vào ví khi lấy đơn từ Shop thành công và nhập kho.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-550 mb-1.5 uppercase">
+                      Thù lao Trả hàng thành công
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="0"
+                        disabled={isReadOnly}
+                        className="block w-full px-4 py-2.5 bg-slate-50 border border-slate-200 text-slate-800 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 text-xs font-semibold disabled:opacity-70 disabled:cursor-not-allowed"
+                        value={config.shipper_return_payout || 2500}
+                        onChange={(e) =>
+                          setConfig({
+                            ...config,
+                            shipper_return_payout: Number(e.target.value),
+                          })
+                        }
+                      />
+                      <span className="absolute inset-y-0 right-4 flex items-center text-[10px] text-slate-400 font-bold">
+                        VNĐ / Đơn
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      Cộng vào ví khi giao hoàn trả hàng về Shop thành công.
+                    </p>
+                  </div>
+                </div>
+
                 <div className="p-3.5 bg-blue-50/50 border border-blue-150 text-xs rounded-xl space-y-1.5 mt-4">
                   <span className="font-extrabold text-blue-800 block uppercase text-[10px]">
-                    Cơ chế ví tiền tài xế:
+                    Cơ chế ví thu nhập tài xế toàn diện:
                   </span>
-                  <p className="text-[10px] text-blue-700 leading-normal">
-                    Thu nhập shipper mỗi đơn hoàn thành ={" "}
-                    <code>
-                      Chiết khấu cố định + (Phí ship * Tỷ lệ phí ship) / 100
-                    </code>
-                    . Số dư khả dụng của tài xế sẽ cộng dồn tương ứng ngay sau
-                    khi bấm hoàn tất đơn.
+                  <p className="text-[10px] text-blue-700 leading-relaxed">
+                    - <strong>Giao thành công:</strong> Chiết khấu cố định + (% Phí ship).<br />
+                    - <strong>Lấy thành công:</strong> Cộng thù lao lấy hàng ({config.shipper_pickup_payout?.toLocaleString("vi-VN") || "2.500"} ₫/đơn) khi nhập kho.<br />
+                    - <strong>Trả thành công:</strong> Cộng thù lao hoàn trả ({config.shipper_return_payout?.toLocaleString("vi-VN") || "2.500"} ₫/đơn) khi bàn giao về Shop.
                   </p>
                 </div>
               </div>

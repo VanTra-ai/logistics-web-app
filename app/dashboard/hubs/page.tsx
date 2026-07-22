@@ -19,6 +19,7 @@ import {
 import api from "@/lib/axios";
 import axios from "axios";
 import Pagination from "@/components/Pagination";
+import AddressInput from "@/app/components/AddressInput";
 
 interface Hub {
   id: string;
@@ -33,6 +34,7 @@ export default function HubsPage() {
   // Trạng thái danh sách & bộ lọc
   const [hubs, setHubs] = useState<Hub[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | "ACTIVE" | "INACTIVE">("ALL");
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -54,9 +56,23 @@ export default function HubsPage() {
   const [selectedHub, setSelectedHub] = useState<Hub | null>(null);
 
   // Dữ liệu Form
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    name: string;
+    address: string;
+    province_code?: string;
+    province_name?: string;
+    ward_code?: string;
+    ward_name?: string;
+    street?: string;
+    is_active: boolean;
+  }>({
     name: "",
     address: "",
+    province_code: "",
+    province_name: "",
+    ward_code: "",
+    ward_name: "",
+    street: "",
     is_active: true,
   });
   const [isSubmitLoading, setIsSubmitLoading] = useState(false);
@@ -113,16 +129,40 @@ export default function HubsPage() {
     }
   }, [notification]);
 
-  // Tìm kiếm & Lọc bưu cục theo tên hoặc địa chỉ
-  const filteredHubs = hubs.filter(
-    (hub) =>
+  // Tìm kiếm & Lọc bưu cục theo tên, địa chỉ và trạng thái
+  const filteredHubs = hubs.filter((hub) => {
+    const matchesSearch =
       hub.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      hub.address.toLowerCase().includes(searchTerm.toLowerCase()),
-  );
+      hub.address.toLowerCase().includes(searchTerm.toLowerCase());
+
+    const matchesStatus =
+      statusFilter === "ALL"
+        ? true
+        : statusFilter === "ACTIVE"
+        ? hub.is_active
+        : !hub.is_active;
+
+    return matchesSearch && matchesStatus;
+  });
+
+  const isFiltered = searchTerm.trim() !== "" || statusFilter !== "ALL";
+  const displayTotalItems = isFiltered ? filteredHubs.length : totalItems;
+  const displayTotalPages = isFiltered
+    ? Math.ceil(filteredHubs.length / itemsPerPage) || 1
+    : totalPages;
 
   // Mở Modal Thêm mới
   const openAddModal = () => {
-    setFormData({ name: "", address: "", is_active: true });
+    setFormData({
+      name: "",
+      address: "",
+      province_code: "",
+      province_name: "",
+      ward_code: "",
+      ward_name: "",
+      street: "",
+      is_active: true,
+    });
     setFormError("");
     setIsAddModalOpen(true);
   };
@@ -133,6 +173,11 @@ export default function HubsPage() {
     setFormData({
       name: hub.name,
       address: hub.address,
+      province_code: "",
+      province_name: "",
+      ward_code: "",
+      ward_name: "",
+      street: hub.address,
       is_active: hub.is_active,
     });
     setFormError("");
@@ -304,7 +349,7 @@ export default function HubsPage() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-slate-800">
-              Quản lý bưu cục (Hubs)
+              Quản lý Bưu cục
             </h1>
             <p className="text-xs text-slate-500 mt-1">
               Quản lý và điều phối các kho hàng bưu cục trong mạng lưới
@@ -335,26 +380,42 @@ export default function HubsPage() {
 
       {/* Search & Statistics Overview */}
       <div className="flex flex-col md:flex-row gap-4 items-stretch md:items-center justify-between">
-        {/* Search input */}
-        <div className="relative flex-1 max-w-md">
-          <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-            <Search className="w-4 h-4 text-slate-400" />
+        {/* Search & Status Filter */}
+        <div className="flex flex-col sm:flex-row gap-3 flex-1 max-w-xl">
+          <div className="relative flex-1">
+            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+              <Search className="w-4 h-4 text-slate-400" />
+            </div>
+            <input
+              type="text"
+              className="block w-full pl-10 pr-4 py-2.5 bg-white border border-slate-250 text-slate-800 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm"
+              placeholder="Tìm theo tên bưu cục hoặc địa chỉ..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
           </div>
-          <input
-            type="text"
-            className="block w-full pl-10 pr-4 py-2.5 bg-white border border-slate-250 text-slate-800 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm"
-            placeholder="Tìm theo tên bưu cục hoặc địa chỉ..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+
+          <select
+            value={statusFilter}
+            onChange={(e) =>
+              setStatusFilter(e.target.value as "ALL" | "ACTIVE" | "INACTIVE")
+            }
+            className="px-3.5 py-2.5 bg-white border border-slate-250 text-slate-700 text-xs font-semibold rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer shadow-sm"
+          >
+            <option value="ALL">Tất cả trạng thái</option>
+            <option value="ACTIVE">Đang hoạt động</option>
+            <option value="INACTIVE">Đã đóng cửa</option>
+          </select>
         </div>
 
         {/* Counter quick metrics */}
         <div className="flex gap-4 text-xs font-semibold">
           <div className="bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm flex items-center gap-2">
-            <span className="text-slate-500">Tổng số:</span>
+            <span className="text-slate-500">
+              {isFiltered ? "Kết quả lọc:" : "Tổng số:"}
+            </span>
             <span className="text-slate-800 font-bold text-sm">
-              {totalItems}
+              {displayTotalItems}
             </span>
           </div>
           <div className="bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm flex items-center gap-2">
@@ -473,9 +534,9 @@ export default function HubsPage() {
         )}
         {!isLoading && filteredHubs.length > 0 && (
           <Pagination
-            currentPage={currentPage}
-            totalPages={totalPages}
-            totalItems={totalItems}
+            currentPage={isFiltered ? 1 : currentPage}
+            totalPages={displayTotalPages}
+            totalItems={displayTotalItems}
             itemsPerPage={itemsPerPage}
             onPageChange={setCurrentPage}
           />
@@ -523,17 +584,26 @@ export default function HubsPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                  Địa chỉ chi tiết
-                </label>
-                <textarea
-                  required
-                  rows={3}
-                  className="block w-full px-3.5 py-2.5 bg-slate-50 border border-slate-250 text-slate-800 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm placeholder:text-slate-400 resize-none"
-                  placeholder="Ví dụ: Số 15 Duy Tân, Dịch Vọng Hậu, Cầu Giấy, Hà Nội"
-                  value={formData.address}
-                  onChange={(e) =>
-                    setFormData({ ...formData, address: e.target.value })
+                <AddressInput
+                  label="Địa chỉ bưu cục"
+                  value={{
+                    province_code: formData.province_code,
+                    province_name: formData.province_name,
+                    ward_code: formData.ward_code,
+                    ward_name: formData.ward_name,
+                    street: formData.street,
+                    full_address: formData.address,
+                  }}
+                  onChange={(val) =>
+                    setFormData({
+                      ...formData,
+                      province_code: val.province_code || "",
+                      province_name: val.province_name || "",
+                      ward_code: val.ward_code || "",
+                      ward_name: val.ward_name || "",
+                      street: val.street || "",
+                      address: val.full_address || "",
+                    })
                   }
                 />
               </div>
@@ -599,16 +669,26 @@ export default function HubsPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                  Địa chỉ chi tiết
-                </label>
-                <textarea
-                  required
-                  rows={3}
-                  className="block w-full px-3.5 py-2.5 bg-slate-50 border border-slate-250 text-slate-800 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm resize-none"
-                  value={formData.address}
-                  onChange={(e) =>
-                    setFormData({ ...formData, address: e.target.value })
+                <AddressInput
+                  label="Địa chỉ bưu cục"
+                  value={{
+                    province_code: formData.province_code,
+                    province_name: formData.province_name,
+                    ward_code: formData.ward_code,
+                    ward_name: formData.ward_name,
+                    street: formData.street,
+                    full_address: formData.address,
+                  }}
+                  onChange={(val) =>
+                    setFormData({
+                      ...formData,
+                      province_code: val.province_code || "",
+                      province_name: val.province_name || "",
+                      ward_code: val.ward_code || "",
+                      ward_name: val.ward_name || "",
+                      street: val.street || "",
+                      address: val.full_address || "",
+                    })
                   }
                 />
               </div>

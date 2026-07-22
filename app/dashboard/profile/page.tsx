@@ -10,6 +10,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import api from "@/lib/axios";
+import AddressInput from "@/app/components/AddressInput";
 
 interface UserProfile {
   email?: string;
@@ -28,6 +29,15 @@ export default function ProfilePage() {
     phone_number: "",
     address: "",
   });
+
+  const [addressVal, setAddressVal] = useState<{
+    province_code?: string;
+    province_name?: string;
+    ward_code?: string;
+    ward_name?: string;
+    street?: string;
+    full_address?: string;
+  }>({});
 
   const [passwordData, setPasswordData] = useState({
     oldPassword: "",
@@ -48,11 +58,13 @@ export default function ProfilePage() {
     try {
       const res = await api.get("/users/profile");
       setProfile(res.data);
+      const addr = res.data.address || "";
       setFormData({
         fullName: res.data.full_name || "",
         phone_number: res.data.phone_number || "",
-        address: res.data.address || "",
+        address: addr,
       });
+      setAddressVal({ full_address: addr });
     } catch (err) {
       console.error(err);
     } finally {
@@ -211,18 +223,31 @@ export default function ProfilePage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                Địa chỉ
-              </label>
-              <input
-                type="text"
-                value={formData.address}
-                onChange={(e) =>
-                  setFormData({ ...formData, address: e.target.value })
-                }
-                disabled={!isEditing}
-                className={`w-full px-4 py-2.5 border rounded-xl outline-none transition-all ${isEditing ? "border-blue-300 focus:ring-2 focus:ring-blue-100 bg-white" : "border-slate-200 bg-slate-50 text-slate-600"}`}
-              />
+              {isEditing ? (
+                <AddressInput
+                  label="Địa chỉ"
+                  value={addressVal}
+                  onChange={(val) => {
+                    setAddressVal(val);
+                    setFormData((prev) => ({
+                      ...prev,
+                      address: val.full_address || "",
+                    }));
+                  }}
+                />
+              ) : (
+                <>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                    Địa chỉ
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.address}
+                    disabled
+                    className="w-full px-4 py-2.5 border border-slate-200 bg-slate-50 text-slate-600 rounded-xl outline-none"
+                  />
+                </>
+              )}
             </div>
 
             {isEditing && (

@@ -102,8 +102,13 @@ export default function TMSDashboard() {
         setOrders(mappedOrders);
 
         const hubsList = hubsRes.data?.data || hubsRes.data || [];
+        const activeHubsList = Array.isArray(hubsList)
+          ? hubsList.filter(
+              (h: { is_active?: boolean }) => h.is_active !== false,
+            )
+          : [];
         setHubs(
-          hubsList.map(
+          activeHubsList.map(
             (h: {
               id: string;
               name: string;

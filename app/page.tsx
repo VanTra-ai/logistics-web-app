@@ -2,9 +2,20 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Mail, Lock, LogIn, Truck, AlertCircle, Eye, EyeOff, ShieldCheck, Cpu } from "lucide-react";
+import {
+  Mail,
+  Lock,
+  LogIn,
+  Truck,
+  AlertCircle,
+  Eye,
+  EyeOff,
+  ShieldCheck,
+  Cpu,
+} from "lucide-react";
 import axios from "axios";
 import api from "@/lib/axios";
+import ForgotPasswordModal from "@/components/ForgotPasswordModal";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -14,6 +25,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,16 +61,18 @@ export default function LoginPage() {
         router.refresh();
       } else {
         setErrorMessage(
-          "Không tìm thấy Access Token trong dữ liệu phản hồi từ máy chủ."
+          "Không tìm thấy Access Token trong dữ liệu phản hồi từ máy chủ.",
         );
       }
     } catch (error) {
       if (axios.isAxiosError(error)) {
         setErrorMessage(
-          error.response?.data?.message || "Sai tài khoản hoặc mật khẩu!"
+          error.response?.data?.message || "Sai tài khoản hoặc mật khẩu!",
         );
       } else {
-        setErrorMessage("Lỗi kết nối hệ thống. Vui lòng kiểm tra lại kết nối mạng!");
+        setErrorMessage(
+          "Lỗi kết nối hệ thống. Vui lòng kiểm tra lại kết nối mạng!",
+        );
       }
     } finally {
       setIsLoading(false);
@@ -75,7 +89,7 @@ export default function LoginPage() {
         {/* Left Side: Brand Visual Section (Desktop only) */}
         <div className="hidden lg:flex lg:w-7/12 relative flex-col justify-between p-12 overflow-hidden border-r border-slate-800/40">
           {/* Background Image with Overlay */}
-          <div 
+          <div
             className="absolute inset-0 bg-cover bg-center transition-transform duration-10000 hover:scale-105"
             style={{ backgroundImage: `url('/logistics_hero.png')` }}
           />
@@ -86,8 +100,12 @@ export default function LoginPage() {
             <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-emerald-400 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">
               <Truck className="text-slate-950 w-5 h-5 font-bold" />
             </div>
-            <span className="text-xl font-bold text-white tracking-wider">WMS PRO</span>
-            <span className="px-2 py-0.5 text-[10px] font-semibold text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 rounded-md">V2.6</span>
+            <span className="text-xl font-bold text-white tracking-wider">
+              WMS PRO
+            </span>
+            <span className="px-2 py-0.5 text-[10px] font-semibold text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 rounded-md">
+              V2.6
+            </span>
           </div>
 
           {/* Main Hero Slogan */}
@@ -96,32 +114,45 @@ export default function LoginPage() {
               Hệ thống Điều hành Kho bãi & Vận tải Toàn diện
             </h1>
             <p className="text-slate-400 text-lg leading-relaxed mb-8">
-              Quản lý luồng hàng hóa, tối ưu hóa chuyến xe, giám sát hiệu suất thời gian thực với giải pháp định tuyến thông minh.
+              Quản lý luồng hàng hóa, tối ưu hóa chuyến xe, giám sát hiệu suất
+              thời gian thực với giải pháp định tuyến thông minh.
             </p>
 
             {/* Quick Metrics */}
             <div className="grid grid-cols-3 gap-6 pt-6 border-t border-slate-800/60">
               <div>
                 <p className="text-2xl font-bold text-emerald-400">99.8%</p>
-                <p className="text-xs text-slate-500 mt-1">Độ chính xác vị trí</p>
+                <p className="text-xs text-slate-500 mt-1">
+                  Độ chính xác vị trí
+                </p>
               </div>
               <div>
                 <p className="text-2xl font-bold text-blue-400">30%</p>
-                <p className="text-xs text-slate-500 mt-1">Giảm chi phí vận hành</p>
+                <p className="text-xs text-slate-500 mt-1">
+                  Giảm chi phí vận hành
+                </p>
               </div>
               <div>
                 <p className="text-2xl font-bold text-purple-400">&lt; 15s</p>
-                <p className="text-xs text-slate-500 mt-1">Thời gian xử lý đơn</p>
+                <p className="text-xs text-slate-500 mt-1">
+                  Thời gian xử lý đơn
+                </p>
               </div>
             </div>
           </div>
 
           {/* Footer branding */}
           <div className="relative z-10 flex items-center justify-between text-xs text-slate-500">
-            <span>© 2026 VanTra-ai Logistics Systems. All rights reserved.</span>
+            <span>
+              © 2026 VanTra-ai Logistics Systems. All rights reserved.
+            </span>
             <div className="flex gap-4">
-              <span className="hover:text-slate-400 cursor-pointer transition-colors">Điều khoản</span>
-              <span className="hover:text-slate-400 cursor-pointer transition-colors">Bảo mật</span>
+              <span className="hover:text-slate-400 cursor-pointer transition-colors">
+                Điều khoản
+              </span>
+              <span className="hover:text-slate-400 cursor-pointer transition-colors">
+                Bảo mật
+              </span>
             </div>
           </div>
         </div>
@@ -136,7 +167,9 @@ export default function LoginPage() {
               <div className="lg:hidden mx-auto w-12 h-12 bg-gradient-to-br from-blue-600 to-emerald-400 rounded-2xl flex items-center justify-center mb-4 shadow-lg shadow-blue-500/10">
                 <Truck className="text-slate-950 w-6 h-6" />
               </div>
-              <h2 className="text-3xl font-extrabold text-white tracking-tight">Hệ thống WMS Pro</h2>
+              <h2 className="text-3xl font-extrabold text-white tracking-tight">
+                Hệ thống WMS Pro
+              </h2>
               <p className="text-slate-400 mt-2 text-sm">
                 Đăng nhập tài khoản nội bộ để tiếp tục vận hành
               </p>
@@ -177,12 +210,13 @@ export default function LoginPage() {
                   <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider">
                     Mật khẩu
                   </label>
-                  <a
-                    href="#"
-                    className="text-xs text-blue-400 hover:text-blue-300 transition-colors font-medium"
+                  <button
+                    type="button"
+                    onClick={() => setIsForgotPasswordOpen(true)}
+                    className="text-xs text-blue-400 hover:text-blue-300 transition-colors font-medium cursor-pointer"
                   >
                     Quên mật khẩu?
-                  </a>
+                  </button>
                 </div>
                 <div className="relative group">
                   <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
@@ -218,7 +252,10 @@ export default function LoginPage() {
                     type="checkbox"
                     className="h-4 w-4 bg-slate-950 border-slate-800 text-blue-600 focus:ring-blue-500 rounded cursor-pointer"
                   />
-                  <label htmlFor="remember-me" className="ml-2 block text-xs text-slate-400 cursor-pointer select-none">
+                  <label
+                    htmlFor="remember-me"
+                    className="ml-2 block text-xs text-slate-400 cursor-pointer select-none"
+                  >
                     Duy trì đăng nhập
                   </label>
                 </div>
@@ -256,10 +293,22 @@ export default function LoginPage() {
           </div>
 
           <p className="mt-8 text-xs text-slate-600 text-center max-w-sm leading-relaxed">
-            Hệ thống quản lý nội bộ dành riêng cho nhân sự của WMS Pro. Nghiêm cấm mọi hành vi truy cập và phát tán thông tin trái phép.
+            Hệ thống quản lý nội bộ dành riêng cho nhân sự của WMS Pro. Nghiêm
+            cấm mọi hành vi truy cập và phát tán thông tin trái phép.
           </p>
         </div>
       </div>
+
+      {/* Modal Quên Mật Khẩu */}
+      <ForgotPasswordModal
+        isOpen={isForgotPasswordOpen}
+        onClose={() => setIsForgotPasswordOpen(false)}
+        defaultEmail={email}
+        onSuccessReset={(resetEmail) => {
+          setEmail(resetEmail);
+          setPassword("");
+        }}
+      />
     </div>
   );
 }

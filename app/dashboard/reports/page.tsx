@@ -5,152 +5,180 @@ import api from "@/lib/axios";
 import {
   BarChart,
   Bar,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip as RechartsTooltip,
   ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
   Legend,
 } from "recharts";
-import {
-  DollarSign,
-  Package,
-  Wallet,
-  TrendingUp,
-  CheckCircle2,
-  Clock,
-  ChevronRight,
-  Download,
-} from "lucide-react";
+import { DollarSign, Package, TrendingUp, Download, Medal } from "lucide-react";
 
-// MOCK DATA
-const kpiData = [
-  {
-    title: "Tổng Doanh Thu (P&L)",
-    value: "1,250,000,000 ₫",
-    trend: "+15.2%",
-    trendUp: true,
-    icon: DollarSign,
-    color: "bg-emerald-100 text-emerald-600",
-  },
-  {
-    title: "COD Đang Chờ Đối Soát",
-    value: "345,500,000 ₫",
-    trend: "-2.5%",
-    trendUp: false,
-    icon: Wallet,
-    color: "bg-amber-100 text-amber-600",
-  },
-  {
-    title: "Tổng Đơn Hàng",
-    value: "12,450",
-    trend: "+8.4%",
-    trendUp: true,
-    icon: Package,
-    color: "bg-blue-100 text-blue-600",
-  },
-  {
-    title: "Tỷ Lệ Giao Thành Công",
-    value: "94.2%",
-    trend: "+1.2%",
-    trendUp: true,
-    icon: TrendingUp,
-    color: "bg-purple-100 text-purple-600",
-  },
-];
+// Types
+interface PnlData {
+  date: string;
+  revenue: number;
+  costs: number;
+  profit: number;
+}
 
-const revenueData = [
-  { name: "T2", revenue: 150, profit: 45 },
-  { name: "T3", revenue: 230, profit: 70 },
-  { name: "T4", revenue: 180, profit: 50 },
-  { name: "T5", revenue: 290, profit: 90 },
-  { name: "T6", revenue: 250, profit: 75 },
-  { name: "T7", revenue: 340, profit: 110 },
-  { name: "CN", revenue: 310, profit: 95 },
-];
+interface ShipperData {
+  rank?: number;
+  id: string;
+  shipperCode: string;
+  name: string;
+  hubName: string;
+  total_orders: number;
+  successful_orders: number;
+  success_rate: number;
+  revenue: number;
+}
 
-const deliveryRateData = [
-  { name: "Thành Công", value: 85 },
-  { name: "Thất Bại", value: 10 },
-  { name: "Chờ Xử Lý", value: 5 },
-];
-const COLORS = ["#10b981", "#ef4444", "#f59e0b"];
+interface HubData {
+  name: string;
+  scan_in: number;
+  scan_out: number;
+  backlog: number;
+  throughput: number;
+  capacity_utilization: number;
+  exception_rate: number;
+}
 
-const initialCodData = [
-  {
-    id: "SHP-1029",
-    shipperName: "Nguyễn Văn A",
-    ordersCount: 45,
-    codAmount: 12500000,
-    status: "PENDING_REMITTANCE",
-    lastUpdated: "2023-10-25 14:30",
-  },
-  {
-    id: "SHP-1030",
-    shipperName: "Trần Thị B",
-    ordersCount: 32,
-    codAmount: 8400000,
-    status: "PENDING_REMITTANCE",
-    lastUpdated: "2023-10-25 15:15",
-  },
-  {
-    id: "SHP-1031",
-    shipperName: "Lê Văn C",
-    ordersCount: 56,
-    codAmount: 15600000,
-    status: "PENDING_REMITTANCE",
-    lastUpdated: "2023-10-25 16:00",
-  },
-  {
-    id: "SHP-1032",
-    shipperName: "Phạm Văn D",
-    ordersCount: 28,
-    codAmount: 7200000,
-    status: "PENDING_REMITTANCE",
-    lastUpdated: "2023-10-25 16:45",
-  },
-];
+interface PnlByHubData {
+  date: string;
+  hubName: string;
+  revenue: number;
+  material_costs: number;
+  profit: number;
+}
 
 export default function ReportsPage() {
-  const [codData, setCodData] = useState(initialCodData);
-  const [pnlData, setPnlData] = useState({ revenue: 0, costs: 0, pnl: 0 });
+  const [pnlData, setPnlData] = useState<PnlData[]>([]);
+  const [shipperData, setShipperData] = useState<ShipperData[]>([]);
+  const [hubData, setHubData] = useState<HubData[]>([]);
+  const [pnlByHubData, setPnlByHubData] = useState<PnlByHubData[]>([]);
+  const [shipperPage, setShipperPage] = useState(1);
+  const [shipperMeta, setShipperMeta] = useState<{
+    totalItems: number;
+    itemCount: number;
+    itemsPerPage: number;
+    totalPages: number;
+    currentPage: number;
+  }>({
+    totalItems: 0,
+    itemCount: 0,
+    itemsPerPage: 10,
+    totalPages: 1,
+    currentPage: 1,
+  });
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
   useEffect(() => {
-    const fetchPnl = async () => {
+    const fetchData = async () => {
       try {
-        let url = "/reports/pnl";
         const params = new URLSearchParams();
         if (startDate) params.append("startDate", startDate);
         if (endDate) params.append("endDate", endDate);
-        if (startDate || endDate) url += `?${params.toString()}`;
-        const res = await api.get(url);
-        if (res.data) {
-          setPnlData(res.data);
+        const query = startDate || endDate ? `?${params.toString()}` : "";
+        const shipperQuery = `${query ? query + "&" : "?"}page=${shipperPage}&limit=10`;
+
+        const [pnlRes, shipperRes, hubRes, pnlByHubRes] = await Promise.all([
+          api.get(`/reports/pnl${query}`),
+          api.get(`/reports/shipper-kpi${shipperQuery}`),
+          api.get(`/reports/warehouse-kpi${query}`),
+          api.get(`/reports/pnl-by-hub${query}`),
+        ]);
+
+        if (pnlRes.data) setPnlData(pnlRes.data);
+        if (shipperRes.data?.data) {
+          setShipperData(shipperRes.data.data);
+          setShipperMeta(shipperRes.data.meta);
+        } else if (Array.isArray(shipperRes.data)) {
+          setShipperData(shipperRes.data);
         }
+        if (hubRes.data) setHubData(hubRes.data);
+        if (pnlByHubRes.data) setPnlByHubData(pnlByHubRes.data);
       } catch (error) {
-        console.error("Lỗi lấy dữ liệu P&L", error);
+        console.error("Lỗi lấy dữ liệu Báo cáo BI", error);
       }
     };
-    fetchPnl();
-  }, [startDate, endDate]);
 
-  const handleConfirmCollection = (id: string) => {
-    setCodData((prev) =>
-      prev.map((item) =>
-        item.id === id ? { ...item, status: "COLLECTED" } : item,
-      ),
+    fetchData();
+  }, [startDate, endDate, shipperPage]);
+
+  const exportReport = () => {
+    let csv = "\uFEFF"; // UTF-8 BOM cho Excel mở tiếng Việt không lỗi font
+
+    // KHỐI 1: P&L THEO BƯU CỤC
+    csv += "=== KHOI 1: BÁO CÁO TÀI CHÍNH P&L THEO BƯU CỤC ===\n";
+    csv +=
+      "Ngay,Buu Cuc,Doanh Thu (VND),Phi Vat Tu (VND),Loi Nhuan Gop (VND)\n";
+    pnlByHubData.forEach((row) => {
+      csv += `${row.date},${row.hubName},${row.revenue},${row.material_costs},${row.profit}\n`;
+    });
+    csv += "\n\n";
+
+    // KHỐI 2: LƯU LƯỢNG & TỒN KHO BƯU CỤC
+    csv += "=== KHOI 2: BÁO CÁO LƯU LƯỢNG & TỒN KHO BƯU CỤC ===\n";
+    csv +=
+      "Buu Cuc,Scan-In (Nhap Kho),Scan-Out (Xuat Kho),Ton Kho (Backlog),Tong Luu Luong\n";
+    hubData.forEach((row) => {
+      csv += `${row.name},${row.scan_in},${row.scan_out},${row.backlog},${row.throughput}\n`;
+    });
+    csv += "\n\n";
+
+    // KHỐI 3: XẾP HẠNG SHIPPER THEO DOANH THU
+    csv += "=== KHOI 3: BẢNG XẾP HẠNG SHIPPER THEO DOANH THU ===\n";
+    csv +=
+      "Hang,Ma Shipper,Ho Va Ten,Thuoc Buu Cuc,So Don HT,Ty Le Thanh Cong (%),Doanh Thu (VND)\n";
+    shipperData.forEach((row, idx) => {
+      csv += `${idx + 1},${row.shipperCode},${row.name},${row.hubName},${row.successful_orders},${row.success_rate.toFixed(1)},${row.revenue}\n`;
+    });
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute(
+      "download",
+      `Bao_Cao_BI_Tong_Hop_${new Date().toISOString().split("T")[0]}.csv`,
     );
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
-  // Cập nhật lại giá trị KPI từ backend
-  const dynamicKpiData = [...kpiData];
-  dynamicKpiData[0].value = `${pnlData.pnl.toLocaleString("vi-VN")} ₫`;
-  dynamicKpiData[0].title = "Lợi Nhuận Gộp (P&L)";
+  // KPIs
+  const totalRevenue = pnlData.reduce((acc, curr) => acc + curr.revenue, 0);
+  const totalProfit = pnlData.reduce((acc, curr) => acc + curr.profit, 0);
+  const totalThroughput = hubData.reduce(
+    (acc, curr) => acc + curr.throughput,
+    0,
+  );
+
+  const kpiCards = [
+    {
+      title: "Tổng Doanh Thu",
+      value: `${totalRevenue.toLocaleString("vi-VN")} ₫`,
+      icon: DollarSign,
+      color: "bg-blue-100 text-blue-600",
+    },
+    {
+      title: "Lợi Nhuận Gộp (P&L)",
+      value: `${totalProfit.toLocaleString("vi-VN")} ₫`,
+      icon: TrendingUp,
+      color: "bg-emerald-100 text-emerald-600",
+    },
+    {
+      title: "Lưu Lượng Kho (Throughput)",
+      value: `${totalThroughput.toLocaleString("vi-VN")} Đơn`,
+      icon: Package,
+      color: "bg-purple-100 text-purple-600",
+    },
+  ];
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
@@ -158,7 +186,7 @@ export default function ReportsPage() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-            Báo Cáo BI & Phân Tích
+            Báo cáo & Phân tích BI
           </h1>
           <p className="text-sm text-slate-500 mt-1">
             Theo dõi hiệu suất vận hành và dòng tiền tổng quan
@@ -183,16 +211,19 @@ export default function ReportsPage() {
               className="text-sm outline-none bg-transparent text-slate-700"
             />
           </div>
-          <button className="flex items-center gap-2 bg-white border border-slate-200 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-50 transition-colors shadow-sm font-medium text-sm">
+          <button
+            onClick={exportReport}
+            className="flex items-center gap-2 bg-white border border-slate-200 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-50 transition-colors shadow-sm font-medium text-sm"
+          >
             <Download className="w-4 h-4" />
-            Xuất Báo Cáo
+            Xuất Báo Cáo Tài Chính
           </button>
         </div>
       </div>
 
       {/* Row 1: KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {dynamicKpiData.map((kpi, index) => (
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {kpiCards.map((kpi, index) => (
           <div
             key={index}
             className="bg-white rounded-xl p-6 border border-slate-100 shadow-sm hover:shadow-md transition-shadow"
@@ -212,37 +243,102 @@ export default function ReportsPage() {
                 <kpi.icon className="w-5 h-5" />
               </div>
             </div>
-            <div className="mt-4 flex items-center text-sm">
-              <span
-                className={`font-semibold ${
-                  kpi.trendUp ? "text-emerald-600" : "text-rose-600"
-                }`}
-              >
-                {kpi.trend}
-              </span>
-              <span className="text-slate-400 ml-2">so với tuần trước</span>
-            </div>
           </div>
         ))}
       </div>
 
       {/* Row 2: Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Bar Chart */}
-        <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-6 lg:col-span-2">
-          <div className="flex justify-between items-center mb-6">
-            <div>
-              <h3 className="text-lg font-bold text-slate-800">
-                Doanh Thu & Lợi Nhuận (7 Ngày)
-              </h3>
-              <p className="text-sm text-slate-500">Đơn vị: Triệu VNĐ</p>
-            </div>
+      <div className="grid grid-cols-1 gap-6">
+        {/* Line Chart: P&L */}
+        <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-6">
+          <div className="mb-6">
+            <h3 className="text-lg font-bold text-slate-800">
+              Doanh Thu & Lợi Nhuận Gộp (P&L)
+            </h3>
+            <p className="text-sm text-slate-500">
+              Xu hướng doanh thu và lợi nhuận thực tế theo ngày
+            </p>
+          </div>
+          <div className="h-[300px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart
+                data={pnlData}
+                margin={{ top: 10, right: 10, left: 10, bottom: 0 }}
+              >
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  vertical={false}
+                  stroke="#e2e8f0"
+                />
+                <XAxis
+                  dataKey="date"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: "#64748b", fontSize: 12 }}
+                  dy={10}
+                />
+                <YAxis
+                  yAxisId="left"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: "#64748b", fontSize: 12 }}
+                />
+                <RechartsTooltip
+                  cursor={{ stroke: "#e2e8f0", strokeWidth: 2 }}
+                  contentStyle={{
+                    borderRadius: "8px",
+                    border: "none",
+                    boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
+                  }}
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  formatter={(value: any) =>
+                    Number(value || 0).toLocaleString("vi-VN") + " ₫"
+                  }
+                />
+                <Legend
+                  iconType="circle"
+                  wrapperStyle={{ paddingTop: "20px" }}
+                />
+                <Line
+                  yAxisId="left"
+                  type="monotone"
+                  dataKey="revenue"
+                  name="Doanh Thu"
+                  stroke="#3b82f6"
+                  strokeWidth={3}
+                  dot={{ r: 4 }}
+                  activeDot={{ r: 6 }}
+                />
+                <Line
+                  yAxisId="left"
+                  type="monotone"
+                  dataKey="profit"
+                  name="Lợi Nhuận"
+                  stroke="#10b981"
+                  strokeWidth={3}
+                  dot={{ r: 4 }}
+                  activeDot={{ r: 6 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Grouped Bar Chart: Hub Performance */}
+        <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-6">
+          <div className="mb-6">
+            <h3 className="text-lg font-bold text-slate-800">
+              Lưu Lượng Bưu Cục (Hub Throughput)
+            </h3>
+            <p className="text-sm text-slate-500">
+              Tổng quan năng lực nhập xuất (Scan-in & Scan-out) tại các Hub
+            </p>
           </div>
           <div className="h-[300px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
-                data={revenueData}
-                margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                data={hubData}
+                margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
               >
                 <CartesianGrid
                   strokeDasharray="3 3"
@@ -274,181 +370,148 @@ export default function ReportsPage() {
                   wrapperStyle={{ paddingTop: "20px" }}
                 />
                 <Bar
-                  dataKey="revenue"
-                  name="Doanh Thu"
-                  fill="#3b82f6"
+                  dataKey="scan_in"
+                  name="Scan-In (Nhập kho)"
+                  fill="#8b5cf6"
                   radius={[4, 4, 0, 0]}
-                  barSize={32}
                 />
                 <Bar
-                  dataKey="profit"
-                  name="Lợi Nhuận"
-                  fill="#10b981"
+                  dataKey="scan_out"
+                  name="Scan-Out (Xuất kho)"
+                  fill="#f59e0b"
                   radius={[4, 4, 0, 0]}
-                  barSize={32}
+                />
+                <Bar
+                  dataKey="backlog"
+                  name="Tồn kho (Backlog)"
+                  fill="#ef4444"
+                  radius={[4, 4, 0, 0]}
                 />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
-
-        {/* Pie Chart */}
-        <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-6">
-          <h3 className="text-lg font-bold text-slate-800 mb-6">
-            Tỷ Lệ Giao Hàng
-          </h3>
-          <div className="h-[250px] w-full relative">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={deliveryRateData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={80}
-                  paddingAngle={5}
-                  dataKey="value"
-                >
-                  {deliveryRateData.map((entry, index) => (
-                    <Cell
-                      key={`cell-${index}`}
-                      fill={COLORS[index % COLORS.length]}
-                      stroke="transparent"
-                    />
-                  ))}
-                </Pie>
-                <RechartsTooltip
-                  contentStyle={{
-                    borderRadius: "8px",
-                    border: "none",
-                    boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
-                  }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-            {/* Inner Text */}
-            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-              <span className="text-3xl font-bold text-slate-800">85%</span>
-              <span className="text-xs text-slate-500 font-medium">
-                Thành công
-              </span>
-            </div>
-          </div>
-          {/* Custom Legend */}
-          <div className="mt-6 space-y-3">
-            {deliveryRateData.map((item, index) => (
-              <div key={index} className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div
-                    className="w-3 h-3 rounded-full"
-                    style={{ backgroundColor: COLORS[index % COLORS.length] }}
-                  ></div>
-                  <span className="text-sm font-medium text-slate-600">
-                    {item.name}
-                  </span>
-                </div>
-                <span className="text-sm font-bold text-slate-800">
-                  {item.value}%
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
       </div>
 
-      {/* Row 3: Data Table */}
+      {/* Row 3: Leaderboard */}
       <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
         <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <h3 className="text-lg font-bold text-slate-800">
-              Đối Soát COD Shipper
+              Bảng Xếp Hạng & Báo Cáo Hiệu Suất Shipper
             </h3>
             <p className="text-sm text-slate-500 mt-1">
-              Danh sách các khoản thu hộ (COD) cần đối soát với Shipper.
+              Đánh giá toàn bộ hiệu suất và doanh thu mang lại từ Shipper.
             </p>
           </div>
-          <button className="text-sm font-medium text-blue-600 hover:text-blue-700 flex items-center">
-            Xem tất cả <ChevronRight className="w-4 h-4 ml-1" />
-          </button>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
+                <th className="px-6 py-4 font-semibold text-center w-16">
+                  Hạng
+                </th>
                 <th className="px-6 py-4 font-semibold">Mã Shipper</th>
-                <th className="px-6 py-4 font-semibold">Tên Shipper</th>
-                <th className="px-6 py-4 font-semibold text-center">Số Đơn</th>
+                <th className="px-6 py-4 font-semibold">Họ và Tên</th>
+                <th className="px-6 py-4 font-semibold">Kho</th>
+                <th className="px-6 py-4 font-semibold text-center">
+                  Số Đơn HT
+                </th>
+                <th className="px-6 py-4 font-semibold text-center">
+                  Tỷ Lệ Thành Công
+                </th>
                 <th className="px-6 py-4 font-semibold text-right">
-                  Tổng COD (VNĐ)
-                </th>
-                <th className="px-6 py-4 font-semibold text-center">
-                  Trạng Thái
-                </th>
-                <th className="px-6 py-4 font-semibold text-center">
-                  Hành Động
+                  Doanh Thu
                 </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm">
-              {codData.map((row) => (
-                <tr
-                  key={row.id}
-                  className="hover:bg-slate-50/50 transition-colors"
-                >
-                  <td className="px-6 py-4 font-medium text-slate-800">
-                    {row.id}
-                  </td>
-                  <td className="px-6 py-4 text-slate-600">
-                    {row.shipperName}
-                  </td>
-                  <td className="px-6 py-4 text-center text-slate-600">
-                    {row.ordersCount}
-                  </td>
-                  <td className="px-6 py-4 text-right font-semibold text-slate-800">
-                    {row.codAmount.toLocaleString("vi-VN")} ₫
-                  </td>
-                  <td className="px-6 py-4 text-center">
-                    {row.status === "PENDING_REMITTANCE" ? (
-                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700 border border-amber-200">
-                        <Clock className="w-3 h-3 mr-1" />
-                        Chờ thu
+              {shipperData.map((row, idx) => {
+                const displayRank = row.rank || idx + 1;
+                return (
+                  <tr
+                    key={row.id}
+                    className={`transition-colors hover:bg-slate-50/50`}
+                  >
+                    <td className="px-6 py-4 font-bold text-center">
+                      {displayRank === 1 ? (
+                        <Medal className="w-5 h-5 mx-auto text-amber-500" />
+                      ) : displayRank === 2 ? (
+                        <Medal className="w-5 h-5 mx-auto text-slate-400" />
+                      ) : displayRank === 3 ? (
+                        <Medal className="w-5 h-5 mx-auto text-amber-700" />
+                      ) : (
+                        <span className="text-slate-400">#{displayRank}</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-slate-500 font-mono text-xs">
+                      {row.shipperCode}
+                    </td>
+                    <td className="px-6 py-4 font-medium text-slate-800">
+                      {row.name}
+                    </td>
+                    <td className="px-6 py-4 text-slate-600">
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700">
+                        {row.hubName}
                       </span>
-                    ) : (
-                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 border border-emerald-200">
-                        <CheckCircle2 className="w-3 h-3 mr-1" />
-                        Đã thu
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 text-center">
-                    {row.status === "PENDING_REMITTANCE" ? (
-                      <button
-                        onClick={() => handleConfirmCollection(row.id)}
-                        className="inline-flex items-center justify-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
-                      >
-                        Xác nhận đã thu
-                      </button>
-                    ) : (
-                      <span className="text-slate-400 text-xs italic">
-                        Hoàn tất
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {codData.length === 0 && (
+                    </td>
+                    <td className="px-6 py-4 text-center font-semibold text-slate-700">
+                      {row.successful_orders}
+                    </td>
+                    <td className="px-6 py-4 text-center font-semibold text-emerald-600">
+                      {row.success_rate.toFixed(1)}%
+                    </td>
+                    <td className="px-6 py-4 text-right font-bold text-slate-800">
+                      {row.revenue.toLocaleString("vi-VN")} ₫
+                    </td>
+                  </tr>
+                );
+              })}
+              {shipperData.length === 0 && (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={7}
                     className="px-6 py-8 text-center text-slate-500"
                   >
-                    Không có dữ liệu đối soát.
+                    Không có dữ liệu đánh giá.
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
+
+        {/* Pagination */}
+        {shipperMeta.totalPages > 1 && (
+          <div className="p-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+            <div>
+              Hiển thị {shipperData.length} trên tổng số{" "}
+              {shipperMeta.totalItems} Shipper
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                disabled={shipperPage <= 1}
+                onClick={() => setShipperPage((p) => Math.max(1, p - 1))}
+                className="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed font-medium text-slate-600"
+              >
+                Trang trước
+              </button>
+              <span className="font-semibold text-slate-700">
+                Trang {shipperMeta.currentPage} / {shipperMeta.totalPages}
+              </span>
+              <button
+                disabled={shipperPage >= shipperMeta.totalPages}
+                onClick={() =>
+                  setShipperPage((p) => Math.min(shipperMeta.totalPages, p + 1))
+                }
+                className="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed font-medium text-slate-600"
+              >
+                Trang sau
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
